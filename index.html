@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudyIndex - AI Study Planner</title>
+    <script>
+      // CRITICAL: Suppress Vite WebSocket errors globally before any other scripts run
+      const originalConsoleError = console.error;
+      console.error = function(...args) {
+        const msg = args.map(a => String(a)).join(' ');
+        if (msg.includes('WebSocket') || msg.includes('websocket') || msg.includes('closed without opened') || msg.includes('[vite] failed to connect')) {
+          return; // Suppress
+        }
+        originalConsoleError.apply(console, args);
+      };
+
+      window.addEventListener('error', function(event) {
+        const msg = event.error?.message || event.message || '';
+        if (msg.includes('WebSocket') || msg.includes('websocket') || msg.includes('closed without opened')) {
+          event.preventDefault();
+          event.stopPropagation();
+          return false;
+        }
+      }, true);
+
+      window.addEventListener('unhandledrejection', function(event) {
+        let reasonStr = '';
+        try {
+          reasonStr = event.reason ? (event.reason.message || event.reason.error || JSON.stringify(event.reason) || String(event.reason)) : '';
+        } catch (e) {
+          reasonStr = String(event.reason);
+        }
+        if (reasonStr.includes('WebSocket') || reasonStr.includes('websocket') || reasonStr.includes('closed without opened')) {
+          event.preventDefault();
+          event.stopPropagation();
+          return false;
+        }
+      }, true);
+    </script>
+    <link rel="manifest" href="./manifest.json" />
+    <meta name="theme-color" content="#5A5A40" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <script>
+      // Force clear cache and storage on load to fix stuck old versions
+      try {
+        const lastClear = localStorage.getItem('last_cache_clear');
+        const now = Date.now();
+        if (!lastClear || (now - parseInt(lastClear)) > 3600000) { // Clear once per hour
+          console.log('[Cache Buster] Clearing storage to force update...');
+          localStorage.clear();
+          sessionStorage.clear();
+          localStorage.setItem('last_cache_clear', now.toString());
+        }
+      } catch (e) {
+        console.error('[Cache Buster] Failed to clear storage:', e);
+      }
+
+      // Fail-safe: If the app hasn't rendered in 20 seconds, reload once
+      window.appStarted = false;
+      window.appScriptError = false;
+      console.log('[Fail-safe] Initialized. Waiting for appStarted...');
+      setTimeout(() => {
+        if (!window.appStarted) {
+          const reloadCount = parseInt(sessionStorage.getItem('reload_count') || '0');
+          const isScriptError = window.appScriptError;
+          
+          if (reloadCount < 3) {
+            console.warn('[Fail-safe] App failed to start within 20s. Reloading... Attempt:', reloadCount + 1, 'Script Error:', isScriptError);
+            sessionStorage.setItem('reload_count', (reloadCount + 1).toString());
+            window.location.reload();
+          } else {
+            console.error('[Fail-safe] App failed to start after multiple reloads. Please clear your browser cache manually.');
+            // Show a manual recovery button if it keeps failing
+            const root = document.getElementById('root');
+            if (root) {
+              root.innerHTML = `
+                <div style="padding: 40px; text-align: center; font-family: sans-serif; color: #5A5A40; background: #F5F5F0; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                  <h2 style="margin-bottom: 20px;">${isScriptError ? 'Script Loading Error' : 'Startup Issue'}</h2>
+                  <p style="margin-bottom: 30px; opacity: 0.7; max-width: 400px;">
+                    ${isScriptError 
+                      ? 'The main application script failed to load. This is often caused by a temporary network issue or an outdated cache.' 
+                      : 'The application is taking longer than expected to start. This might be due to a slow connection or cached data.'}
+                  </p>
+                  <div style="display: flex; gap: 10px;">
+                    <button onclick="window.location.reload();" 
+                            style="padding: 12px 24px; background: #5A5A40; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold;">
+                      Retry
+                    </button>
+                    <button onclick="localStorage.clear(); sessionStorage.clear(); window.location.reload();" 
+                            style="padding: 12px 24px; background: transparent; border: 1px solid #5A5A40; color: #5A5A40; border-radius: 30px; cursor: pointer; font-weight: bold;">
+                      Force Reset
+                    </button>
+                  </div>
+                </div>
+              `;
+            }
+          }
+        }
+      }, 20000);
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <div style="height: 100vh; display: flex; align-items: center; justify-content: center; background: #F5F5F0; font-family: serif; color: #5A5A40;">
+        <div style="text-align: center; padding: 20px;">
+          <h2 style="margin-bottom: 10px;">StudyIndex</h2>
+          <p style="font-style: italic; opacity: 0.6;">Initializing your study planner...</p>
+          <div style="margin-top: 40px; font-size: 10px; opacity: 0.4; font-family: sans-serif; letter-spacing: 1px;">
+            VERSION 1.1.0
+          </div>
+          <button 
+            onclick="localStorage.clear(); sessionStorage.clear(); window.location.reload();"
+            style="margin-top: 20px; padding: 8px 16px; background: transparent; border: 1px solid #5A5A4040; color: #5A5A40; border-radius: 20px; font-size: 11px; cursor: pointer;"
+          >
+            Clear Cache & Restart
+          </button>
+        </div>
+      </div>
+    </div>
+    <script 
+      type="module" 
+      src="./src/main.tsx"
+      onerror="console.error('[Critical] Failed to load main.tsx module script'); window.appScriptError = true;"
+    ></script>
+  </body>
+</html>
+
