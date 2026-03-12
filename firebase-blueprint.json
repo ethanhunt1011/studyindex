@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User preferences and study settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string", "description": "User's preferred name." },
+        "dailyLimit": { "type": "number", "description": "Number of topics to study per day." },
+        "reminderTime": { "type": "string", "description": "Time of day for reminders (e.g., '09:00')." },
+        "focusTime": { "type": "number", "description": "Default focus timer duration in minutes." },
+        "streakCount": { "type": "number", "description": "Consecutive days studied." },
+        "lastStudyDate": { "type": "string", "format": "date", "description": "Last date a topic was completed (YYYY-MM-DD)." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Flashcard": {
+      "title": "AI Flashcard",
+      "description": "AI-generated question and answer for a topic.",
+      "type": "object",
+      "properties": {
+        "topicId": { "type": "string" },
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["topicId", "question", "answer"]
+    },
+    "StudyPlan": {
+      "title": "Study Plan",
+      "description": "Extracted units, chapters, and topics from a book index.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bookTitle": { "type": "string" },
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "order": { "type": "number" },
+              "chapters": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "title": { "type": "string" },
+                    "order": { "type": "number" },
+                    "topics": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "title": { "type": "string" },
+                          "difficulty": { "type": "string", "enum": ["Easy", "Medium", "Complex"] },
+                          "importance": { "type": "string", "enum": ["High", "Medium", "Low"] },
+                          "dailyExercise": { "type": "string" },
+                          "motivation": { "type": "string" },
+                          "order": { "type": "number" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "bookTitle", "units"]
+    },
+    "Progress": {
+      "title": "Study Progress",
+      "description": "Tracks completed topics.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "planId": { "type": "string" },
+        "completedTopicIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "lastStudiedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "planId"]
+    },
+    "ScheduledTopic": {
+      "title": "Scheduled Topic",
+      "description": "A topic scheduled for a specific date and time.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "topicId": { "type": "string" },
+        "planId": { "type": "string" },
+        "topicTitle": { "type": "string" },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "reminderSent": { "type": "boolean" }
+      },
+      "required": ["userId", "topicId", "scheduledAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/studyPlans/{planId}": {
+      "schema": "StudyPlan",
+      "description": "Extracted study plans."
+    },
+    "/progress/{userId}": {
+      "schema": "Progress",
+      "description": "User study progress tracking."
+    },
+    "/flashcards/{flashcardId}": {
+      "schema": "Flashcard",
+      "description": "AI-generated flashcards for study topics."
+    },
+    "/scheduledTopics/{scheduleId}": {
+      "schema": "ScheduledTopic",
+      "description": "Scheduled study sessions."
+    }
+  }
+}

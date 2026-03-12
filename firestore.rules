@@ -1,0 +1,168 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - dailyLimit: number (optional)
+    //   - reminderTime: string (optional)
+    //   - streakCount: number (optional)
+    //   - lastStudyDate: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: studyPlans
+    // Document ID: {planId}
+    // Fields:
+    //   - userId: string (required)
+    //   - bookTitle: string (required)
+    //   - units: list (required)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: progress
+    // Document ID: {userId}_{planId}
+    // Fields:
+    //   - userId: string (required)
+    //   - planId: string (required)
+    //   - completedTopicIds: list (required)
+    //   - lastStudiedAt: timestamp (required)
+    //
+    // Collection: flashcards
+    // Document ID: {flashcardId}
+    // Fields:
+    //   - topicId: string (required)
+    //   - question: string (required)
+    //   - answer: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin') ||
+          (
+            'email' in request.auth.token && 
+            request.auth.token.email == "hunnymalik10.hm@gmail.com" && 
+            request.auth.token.email_verified == true
+          )
+        );
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'createdAt']) &&
+             data.uid is string &&
+             data.email is string &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('dailyLimit' in data) || data.dailyLimit is number) &&
+             (!('reminderTime' in data) || data.reminderTime is string) &&
+             (!('focusTime' in data) || data.focusTime is number) &&
+             (!('streakCount' in data) || data.streakCount is number) &&
+             (!('lastStudyDate' in data) || data.lastStudyDate is string);
+    }
+
+    function isValidFlashcard(data) {
+      return hasRequiredFields(['topicId', 'question', 'answer', 'createdAt']) &&
+             data.topicId is string &&
+             data.question is string &&
+             data.answer is string;
+    }
+
+    function isValidStudyPlan(data) {
+      return hasRequiredFields(['userId', 'bookTitle', 'units', 'createdAt']) &&
+             data.userId is string &&
+             data.bookTitle is string &&
+             data.bookTitle.size() < 200 &&
+             data.units is list &&
+             data.units.size() < 100;
+    }
+
+    function isValidProgress(data) {
+      return hasRequiredFields(['userId', 'planId', 'completedTopicIds', 'lastStudiedAt']) &&
+             data.userId is string &&
+             data.planId is string &&
+             data.completedTopicIds is list &&
+             data.completedTopicIds.size() < 5000;
+    }
+
+    function isValidScheduledTopic(data) {
+      return hasRequiredFields(['userId', 'topicId', 'scheduledAt']) &&
+             data.userId is string &&
+             data.topicId is string &&
+             data.scheduledAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /studyPlans/{planId} {
+      allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidStudyPlan(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /progress/{progressId} {
+      allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidProgress(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidProgress(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /flashcards/{flashcardId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidFlashcard(request.resource.data);
+    }
+
+    match /scheduledTopics/{scheduleId} {
+      allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidScheduledTopic(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidScheduledTopic(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
