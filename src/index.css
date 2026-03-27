@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #F5F5F0;
+  --color-foreground: #1A1A1A;
+  
+  /* Dark mode */
+  --color-background-dark: #0A0A0A;
+  --color-foreground-dark: #E6E6E6;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    transition: background-color 0.3s, color 0.3s;
+  }
+  .dark body {
+    background-color: var(--color-background-dark);
+    color: var(--color-foreground-dark);
+  }
+}
