@@ -1,0 +1,5 @@
+{
+  "name": "StudyIndex - AI Study Planner",
+  "description": "Upload a photo of your book's index and get a personalized daily study schedule powered by AI.",
+  "requestFramePermissions": ["camera"]
+}
