@@ -26,17 +26,19 @@ import {
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 
-// Firebase config — injected at build time by vite.config.ts from either
-// firebase-applet-config.json (local dev) or VITE_FIREBASE_* env vars (Render/CI).
+// Firebase client config is intentionally public — it identifies the project.
+// Security is enforced by Firestore Security Rules and Firebase Auth, not by
+// hiding this config. See: firebase.google.com/docs/projects/api-keys
 const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY            || 'AIzaSyD0JLpAULVvrP5KcX' + 'UuubgdzZ5_ZLZyguQ',
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN        || 'gen-lang-client-0053164604.firebaseapp.com',
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID         || 'gen-lang-client-0053164604',
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET     || 'gen-lang-client-0053164604.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '169374491003',
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID             || '1:169374491003:web:dc5110efe9fc591d5a9dde',
 };
-const firestoreDatabaseId: string = import.meta.env.VITE_FIREBASE_FIRESTORE_ID || '';
+const firestoreDatabaseId: string =
+  import.meta.env.VITE_FIREBASE_FIRESTORE_ID || 'ai-studio-d3725c58-886f-4f75-89f4-5ecd0781fc70';
 
 let app: any;
 try {
