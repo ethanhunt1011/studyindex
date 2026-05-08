@@ -25,7 +25,18 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
-import firebaseConfig from '../../firebase-applet-config.json';
+
+// Firebase config is public by design — security is enforced by Firestore Rules.
+// Values can be overridden via VITE_* env vars if needed.
+const firebaseConfig = {
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY            || 'AIzaSyD0JLpAULVvrP5KcXUuubgdzZ5_ZLZyguQ',
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN        || 'gen-lang-client-0053164604.firebaseapp.com',
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID         || 'gen-lang-client-0053164604',
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET     || 'gen-lang-client-0053164604.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '169374491003',
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID             || '1:169374491003:web:dc5110efe9fc591d5a9dde',
+};
+const firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_ID || 'ai-studio-d3725c58-886f-4f75-89f4-5ecd0781fc70';
 
 let app: any;
 try {
@@ -37,7 +48,7 @@ try {
 
 export const auth = app ? getAuth(app) : null;
 export const db = app
-  ? initializeFirestore(app, { experimentalForceLongPolling: true }, firebaseConfig.firestoreDatabaseId)
+  ? initializeFirestore(app, { experimentalForceLongPolling: true }, firestoreDatabaseId)
   : null;
 export const googleProvider = new GoogleAuthProvider();
 
