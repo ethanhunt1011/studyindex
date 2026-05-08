@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   MASTERY: 'topic_mastery',
   EXAM_SETTINGS: 'exam_settings',
   PRACTICE_HISTORY: 'practice_history',
+  WEEKLY_GOAL: 'weekly_goal',
 };
 
 // ─── SM-2 Spaced Repetition ───────────────────────────────────────────────────
@@ -282,4 +283,21 @@ export const getPracticeHistory = async (): Promise<PracticeExamResult[]> => {
     const { value } = await Preferences.get({ key: STORAGE_KEYS.PRACTICE_HISTORY });
     return value ? JSON.parse(value) : [];
   } catch { return []; }
+};
+
+// ─── Weekly Goal ──────────────────────────────────────────────────────────────
+export interface WeeklyGoal {
+  minutesPerWeek: number;
+}
+
+export const saveWeeklyGoal = async (goal: WeeklyGoal) => {
+  try { await Preferences.set({ key: STORAGE_KEYS.WEEKLY_GOAL, value: JSON.stringify(goal) }); }
+  catch (e) { console.error('Failed to save weekly goal:', e); }
+};
+
+export const getWeeklyGoal = async (): Promise<WeeklyGoal | null> => {
+  try {
+    const { value } = await Preferences.get({ key: STORAGE_KEYS.WEEKLY_GOAL });
+    return value ? JSON.parse(value) : null;
+  } catch { return null; }
 };

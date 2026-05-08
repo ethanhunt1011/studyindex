@@ -22,8 +22,180 @@ import {
   Trophy,
   Zap,
   GraduationCap,
+  FileText,
+  Target,
+  Edit3,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+
+// ─── Progress Ring (SVG circular progress) ───────────────────────────────────
+const ProgressRing = ({
+  value, max, size = 72, strokeWidth = 7, color = '#5A5A40', label, sublabel,
+}: {
+  value: number; max: number; size?: number; strokeWidth?: number;
+  color?: string; label?: string; sublabel?: string;
+}) => {
+  const pct = max > 0 ? Math.min(value / max, 1) : 0;
+  const r = (size - strokeWidth) / 2;
+  const circ = 2 * Math.PI * r;
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F0F0EC" strokeWidth={strokeWidth} />
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={strokeWidth}
+            strokeDasharray={circ} strokeDashoffset={circ * (1 - pct)} strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 1.2s ease-out' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="text-base font-bold text-[#1A1A1A] leading-none">{value}</span>
+          {sublabel && <span className="text-[9px] text-[#5A5A40]/50 font-semibold leading-none mt-0.5">/{max}</span>}
+        </div>
+      </div>
+      {label && <span className="text-[10px] font-semibold text-[#5A5A40]/60 uppercase tracking-wider text-center">{label}</span>}
+    </div>
+  );
+};
+
+// ─── Study Notes Modal ───────────────────────────────────────────────────────
+const StudyNotesModal = ({ topic, onClose }: { topic: any; onClose: () => void }) => {
+  const [notes, setNotes] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/study-notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topicTitle: topic.title, context: topic.dailyExercise || '' }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        setNotes(data);
+        setLoading(false);
+      })
+      .catch((err: any) => { setError(err.message || 'Failed to load notes'); setLoading(false); });
+  }, []);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 overflow-y-auto py-8"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+          className="bg-white rounded-[40px] p-8 max-w-lg w-full shadow-2xl relative"
+          onClick={e => e.stopPropagation()}
+        >
+          <button onClick={onClose} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 transition-colors">
+            <X className="w-5 h-5 text-[#5A5A40]" />
+          </button>
+
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-[#5A5A40] rounded-2xl flex items-center justify-center shrink-0">
+              <FileText className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg text-[#1A1A1A]">Study Notes</h2>
+              <p className="text-xs text-[#5A5A40]/60 truncate max-w-[220px]">{topic.title}</p>
+            </div>
+          </div>
+
+          {loading && (
+            <div className="py-12 flex flex-col items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-[#5A5A40]" />
+              <p className="text-sm text-[#5A5A40]/60">Generating notes…</p>
+            </div>
+          )}
+
+          {error && <p className="text-red-500 text-sm py-4">{error}</p>}
+
+          {notes && !loading && (
+            <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+              {/* Summary */}
+              <div className="p-4 bg-[#5A5A40] rounded-2xl">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/50 mb-1.5">Summary</p>
+                <p className="text-sm text-white leading-relaxed">{notes.summary}</p>
+              </div>
+
+              {/* Key Concepts */}
+              {notes.keyConcepts?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Key Concepts</p>
+                  <div className="space-y-2">
+                    {notes.keyConcepts.map((c: any, i: number) => (
+                      <div key={i} className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                        <span className="font-bold text-sm text-blue-900">{c.term}</span>
+                        <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">{c.definition}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Key Points */}
+              {notes.keyPoints?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Key Points</p>
+                  <ul className="space-y-1.5">
+                    {notes.keyPoints.map((p: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-[#1A1A1A]">
+                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-[#5A5A40] shrink-0" />
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Examples */}
+              {notes.examples?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Examples</p>
+                  <div className="space-y-1.5">
+                    {notes.examples.map((ex: string, i: number) => (
+                      <div key={i} className="p-3 bg-green-50 rounded-xl text-sm text-green-800 border border-green-100">
+                        {ex}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Common Mistakes */}
+              {notes.commonMistakes?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Common Mistakes</p>
+                  <div className="space-y-1.5">
+                    {notes.commonMistakes.map((m: string, i: number) => (
+                      <div key={i} className="p-3 bg-red-50 rounded-xl text-sm text-red-800 border border-red-100 flex gap-2">
+                        <span>⚠️</span> {m}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Memory Tip */}
+              {notes.memoryTip && (
+                <div className="p-4 bg-yellow-50 border border-yellow-100 rounded-2xl">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-yellow-700/60 mb-1.5">💡 Memory Tip</p>
+                  <p className="text-sm text-yellow-900 font-medium leading-relaxed">{notes.memoryTip}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
 
 // ─── Celebration Modal ────────────────────────────────────────────────────────
 const CelebrationModal = ({ onClose, focusMinutes }: { onClose: () => void; focusMinutes: number }) => (
@@ -666,13 +838,19 @@ export const DashboardContent = ({
   masteryData,
   currentTopicId,
   handleSavePracticeResult,
+  weeklyGoal,
+  handleSaveWeeklyGoal,
 }: any) => {
   const isDark = isDeepFocus || theme === 'dark';
 
-  // ── Practice exam local state ────────────────────────────────────────────
+  // ── Local modal state ────────────────────────────────────────────────────
   const [showPracticeExam, setShowPracticeExam] = useState(false);
   const [practiceExamTopic, setPracticeExamTopic] = useState<any>(null);
+  const [showStudyNotes, setShowStudyNotes] = useState(false);
+  const [studyNotesTopic, setStudyNotesTopic] = useState<any>(null);
   const [drillCaughtUp, setDrillCaughtUp] = useState(false);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState(weeklyGoal?.minutesPerWeek?.toString() || '120');
 
   // ── Derived data ────────────────────────────────────────────────────────────
   const allTopics = (plans || []).flatMap((plan: any) => {
@@ -720,6 +898,19 @@ export const DashboardContent = ({
     handleGenerateFlashcards(candidates[0].topic);
   };
 
+  // ── Weekly stats ─────────────────────────────────────────────────────────────
+  const startOfWeek = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+  const thisWeekSessions = (studySessions || []).filter(
+    (s: any) => s.date && new Date(s.date + 'T00:00') >= startOfWeek
+  );
+  const thisWeekMinutes = thisWeekSessions.reduce((sum: number, s: any) => sum + (s.durationMinutes || 0), 0);
+  const goalMinutes = weeklyGoal?.minutesPerWeek || 120;
+
   // ── Quick stats ─────────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySessions = (studySessions || []).filter((s: any) => s.date === todayStr);
@@ -750,6 +941,13 @@ export const DashboardContent = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showStudyNotes && studyNotesTopic && (
+        <StudyNotesModal
+          topic={studyNotesTopic}
+          onClose={() => { setShowStudyNotes(false); setStudyNotesTopic(null); }}
+        />
+      )}
 
       {showPracticeExam && practiceExamTopic && (
         <PracticeExamModal
@@ -863,6 +1061,77 @@ export const DashboardContent = ({
                 </div>
               </motion.div>
             ))}
+          </div>
+        </section>
+
+        {/* ── Weekly Goal ──────────────────────────────────────────────────── */}
+        <section className="mb-8">
+          <div className={cn(
+            "p-6 rounded-[32px] border flex items-center gap-6",
+            isDark ? "bg-[#1A1A1A] border-white/10" : "bg-white border-[#1A1A1A]/5 shadow-sm"
+          )}>
+            <ProgressRing
+              value={thisWeekMinutes}
+              max={goalMinutes}
+              size={80}
+              strokeWidth={8}
+              color={thisWeekMinutes >= goalMinutes ? '#22c55e' : '#5A5A40'}
+              label="min this week"
+              sublabel="goal"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Target className={cn("w-4 h-4", isDark ? "text-white/60" : "text-[#5A5A40]/60")} />
+                <span className={cn("text-sm font-bold", isDark ? "text-white" : "text-[#1A1A1A]")}>Weekly Goal</span>
+                <button
+                  onClick={() => setEditingGoal(p => !p)}
+                  className={cn("p-1 rounded-full transition-colors ml-auto", isDark ? "hover:bg-white/10 text-white/40" : "hover:bg-gray-100 text-[#5A5A40]/40")}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {editingGoal ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="number"
+                    value={goalInput}
+                    onChange={e => setGoalInput(e.target.value)}
+                    placeholder="minutes/week"
+                    className="w-24 bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
+                    min="1"
+                  />
+                  <button
+                    onClick={() => {
+                      const mins = parseInt(goalInput, 10);
+                      if (mins > 0 && handleSaveWeeklyGoal) {
+                        handleSaveWeeklyGoal({ minutesPerWeek: mins });
+                        setEditingGoal(false);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[#5A5A40] text-white text-xs font-bold hover:bg-[#4A4A30] transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className={cn("text-xs mt-1", isDark ? "text-gray-400" : "text-[#5A5A40]/70")}>
+                    {thisWeekMinutes >= goalMinutes
+                      ? `🎉 Goal reached! ${thisWeekMinutes}/${goalMinutes} min`
+                      : `${thisWeekMinutes}/${goalMinutes} min · ${Math.max(0, goalMinutes - thisWeekMinutes)} min to go`}
+                  </p>
+                  <div className={cn("h-1.5 rounded-full mt-2 overflow-hidden", isDark ? "bg-white/10" : "bg-gray-100")}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min((thisWeekMinutes / goalMinutes) * 100, 100)}%` }}
+                      transition={{ duration: 1, ease: 'easeOut' }}
+                      className={cn("h-full rounded-full", thisWeekMinutes >= goalMinutes ? "bg-green-500" : "bg-[#5A5A40]")}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </section>
 
@@ -1020,6 +1289,17 @@ export const DashboardContent = ({
                       )}
                     </div>
                     <div className="flex gap-2 shrink-0">
+                      {/* Study Notes button */}
+                      <button
+                        onClick={() => { setStudyNotesTopic(topic); setShowStudyNotes(true); }}
+                        className={cn(
+                          "p-2.5 rounded-full transition-colors",
+                          isDark ? "bg-white/10 hover:bg-white/20 text-teal-300" : "bg-teal-50 hover:bg-teal-100 text-teal-600"
+                        )}
+                        title="AI Study Notes"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
                       {/* Practice Exam button */}
                       <button
                         onClick={() => { setPracticeExamTopic(topic); setShowPracticeExam(true); }}
@@ -1286,6 +1566,13 @@ export const DashboardContent = ({
                                                 </div>
                                               </div>
                                               <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                  onClick={() => { setStudyNotesTopic(topic); setShowStudyNotes(true); }}
+                                                  className={cn("p-1.5 rounded-full transition-colors", isDark ? "hover:bg-white/10 text-teal-300" : "hover:bg-teal-50 text-teal-500")}
+                                                  title="Study Notes"
+                                                >
+                                                  <FileText className="w-3.5 h-3.5" />
+                                                </button>
                                                 <button
                                                   onClick={() => { setPracticeExamTopic(topic); setShowPracticeExam(true); }}
                                                   className={cn("p-1.5 rounded-full transition-colors", isDark ? "hover:bg-white/10 text-purple-300" : "hover:bg-purple-50 text-purple-500")}

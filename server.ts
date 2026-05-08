@@ -455,6 +455,47 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
   }
 });
 
+// ─── /api/study-notes ────────────────────────────────────────────────────────
+app.post("/api/study-notes", rateLimiter, async (req, res) => {
+  const { topicTitle, context } = req.body;
+  if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
+
+  const cacheKey = `notes:${topicTitle}`;
+  if (chatCache.has(cacheKey)) return res.json(JSON.parse(chatCache.get(cacheKey)!));
+
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Generate concise, high-quality study notes for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+Focus on what a student needs to know to understand and remember this topic well.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            summary:        { type: Type.STRING },
+            keyConcepts:    { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { term: { type: Type.STRING }, definition: { type: Type.STRING } }, required: ["term", "definition"] } },
+            keyPoints:      { type: Type.ARRAY, items: { type: Type.STRING } },
+            examples:       { type: Type.ARRAY, items: { type: Type.STRING } },
+            commonMistakes: { type: Type.ARRAY, items: { type: Type.STRING } },
+            memoryTip:      { type: Type.STRING },
+          },
+          required: ["summary", "keyConcepts", "keyPoints", "examples", "commonMistakes", "memoryTip"]
+        }
+      }
+    });
+    const text = response.text || '{}';
+    chatCache.set(cacheKey, text);
+    res.json(JSON.parse(text));
+  } catch (error: any) {
+    console.error('Error in /api/study-notes:', error);
+    res.status(500).json({ error: error?.message || 'Error generating study notes.' });
+  }
+});
+
 // ─── /api/practice-exam ──────────────────────────────────────────────────────
 app.post("/api/practice-exam", rateLimiter, async (req, res) => {
   const { topicTitle, context } = req.body;

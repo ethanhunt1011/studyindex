@@ -16,13 +16,15 @@ interface AnalyticsProps {
   examSettings?: any;
   handleSaveExamSettings?: (s: any) => void;
   practiceHistory?: any[];
+  sm2Cards?: Record<string, any>;
 }
 
-export const Analytics = ({ studySessions = [], plans = [], progress = {}, profile, masteryData = {}, examSettings, handleSaveExamSettings, practiceHistory = [] }: AnalyticsProps) => {
+export const Analytics = ({ studySessions = [], plans = [], progress = {}, profile, masteryData = {}, examSettings, handleSaveExamSettings, practiceHistory = [], sm2Cards = {} }: AnalyticsProps) => {
   const [editingExam, setEditingExam] = useState(false);
   const [examNameInput, setExamNameInput] = useState(examSettings?.examName || '');
   const [examDateInput, setExamDateInput] = useState(examSettings?.examDate || '');
   const [showAllWeakTopics, setShowAllWeakTopics] = useState(false);
+  const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({});
   // ── Compute stats ────────────────────────────────────────────────────────
   const totalMinutes = studySessions.reduce((s: number, x: any) => s + (x.durationMinutes || 0), 0);
   const totalHours = (totalMinutes / 60).toFixed(1);
@@ -91,6 +93,19 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
   const readinessColor = readinessPct >= 70 ? 'text-green-700' : readinessPct >= 40 ? 'text-yellow-700' : 'text-red-700';
   const readinessBg = readinessPct >= 70 ? 'bg-green-50 border-green-100' : readinessPct >= 40 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100';
   const readinessFill = readinessPct >= 70 ? 'bg-green-500' : readinessPct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+
+  // ── Forgetting Curve (Ebbinghaus) — R = e^(-t / S) ──────────────────────
+  // S = SM-2 interval (stability), t = days since last review
+  const forgettingData = allTopicsFlat.map((t: any) => {
+    const cards = Object.values(sm2Cards).filter((c: any) => c.topicId === t.id && c.lastReviewed && c.interval > 0);
+    if (!cards.length) return null;
+    const retentions = cards.map((c: any) => {
+      const daysSince = Math.floor((new Date().getTime() - new Date(c.lastReviewed + 'T00:00').getTime()) / (1000 * 60 * 60 * 24));
+      return Math.exp(-Math.max(daysSince, 0) / c.interval);
+    });
+    const avgR = retentions.reduce((a: number, b: number) => a + b, 0) / retentions.length;
+    return { id: t.id, title: t.title, retention: Math.round(avgR * 100) };
+  }).filter(Boolean).sort((a: any, b: any) => a.retention - b.retention) as { id: string; title: string; retention: number }[];
 
   // ── Last 63 days heatmap ─────────────────────────────────────────────────
   const heatmapDays: { date: string; minutes: number }[] = [];
@@ -347,6 +362,119 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
             </div>
           )}
 
+          {/* ── Knowledge Map ────────────────────────────────────────────────── */}
+          {plans.length > 0 && (
+            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <BookOpen className="w-5 h-5 text-[#5A5A40]" />
+                <h2 className="font-bold text-[#1A1A1A]">Knowledge Map</h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-[#5A5A40]/10 text-[#5A5A40] rounded-full ml-1">
+                  {allTopicsFlat.length} topics
+                </span>
+              </div>
+              <div className="space-y-3">
+                {plans.map((plan: any) => {
+                  const planProgress = progress[plan.id]?.completedTopicIds || [];
+                  const isExpanded = expandedPlans[plan.id] !== false; // default open
+                  return (
+                    <div key={plan.id}>
+                      <button
+                        onClick={() => setExpandedPlans(p => ({ ...p, [plan.id]: !isExpanded }))}
+                        className="w-full flex items-center gap-2 p-3 rounded-2xl hover:bg-[#F5F5F0] transition-colors text-left"
+                      >
+                        <span className="text-base">{isExpanded ? '📖' : '📕'}</span>
+                        <span className="font-bold text-sm text-[#1A1A1A] flex-1 truncate">{plan.bookTitle}</span>
+                        <ChevronDown className={cn("w-4 h-4 text-[#5A5A40]/40 shrink-0 transition-transform", !isExpanded && "-rotate-90")} />
+                      </button>
+                      {isExpanded && (
+                        <div className="pl-5 mt-1 space-y-2 border-l-2 border-[#5A5A40]/10 ml-4">
+                          {plan.units?.map((unit: any) => (
+                            <div key={unit.id || unit.title}>
+                              <p className="text-xs font-bold uppercase tracking-wider text-[#5A5A40]/60 py-1">{unit.title}</p>
+                              {unit.chapters?.map((ch: any) => (
+                                <div key={ch.id || ch.title} className="pl-3 border-l border-gray-100 mb-2">
+                                  <p className="text-[10px] font-semibold text-[#5A5A40]/40 uppercase tracking-wider mb-1">{ch.title}</p>
+                                  <div className="space-y-1">
+                                    {ch.topics?.map((t: any) => {
+                                      const isCompleted = planProgress.includes(t.id);
+                                      const m = masteryData[t.id];
+                                      const dotColor = m ? (m.score >= 70 ? 'bg-green-500' : m.score >= 40 ? 'bg-yellow-500' : 'bg-red-500') : isCompleted ? 'bg-[#5A5A40]' : 'bg-gray-200';
+                                      return (
+                                        <div key={t.id} className="flex items-center gap-2">
+                                          <div className={cn("w-2 h-2 rounded-full shrink-0", dotColor)} />
+                                          <span className={cn("text-xs flex-1 truncate", isCompleted ? "line-through text-[#5A5A40]/40" : "text-[#1A1A1A]")}>{t.title}</span>
+                                          {m && <span className="text-[10px] font-bold text-[#5A5A40]/50 shrink-0">{m.score}%</span>}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Legend */}
+              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
+                {[
+                  { color: 'bg-green-500', label: '≥70% mastery' },
+                  { color: 'bg-yellow-500', label: '40–69%' },
+                  { color: 'bg-red-500', label: '<40%' },
+                  { color: 'bg-[#5A5A40]', label: 'Completed' },
+                  { color: 'bg-gray-200', label: 'Not started' },
+                ].map(({ color, label }) => (
+                  <div key={label} className="flex items-center gap-1">
+                    <div className={cn("w-2 h-2 rounded-full shrink-0", color)} />
+                    <span className="text-[10px] text-[#5A5A40]/50">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Forgetting Curve / Retention ──────────────────────────────────── */}
+          {forgettingData.length > 0 && (
+            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-5 h-5 text-[#5A5A40]" />
+                <h2 className="font-bold text-[#1A1A1A]">Forgetting Curve</h2>
+              </div>
+              <p className="text-[10px] text-[#5A5A40]/50 mb-5">
+                Estimated retention per topic using Ebbinghaus formula: R = e<sup>–t/S</sup> (t = days since review, S = SM-2 stability)
+              </p>
+              <div className="space-y-2">
+                {forgettingData.slice(0, 8).map((item) => {
+                  const pct = item.retention;
+                  const barColor = pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+                  const textColor = pct >= 70 ? 'text-green-700' : pct >= 40 ? 'text-yellow-700' : 'text-red-700';
+                  return (
+                    <div key={item.id}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-[#1A1A1A] truncate flex-1 mr-3">{item.title}</span>
+                        <span className={cn("text-xs font-bold shrink-0 tabular-nums", textColor)}>{pct}%</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                          className={cn("h-full rounded-full", barColor)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-[#5A5A40]/40 mt-4 italic">
+                Sorted by lowest retention first — these topics need review soonest.
+              </p>
+            </div>
+          )}
+
           {/* ── Practice Exam History ─────────────────────────────────────────── */}
           {practiceHistory.length > 0 && (
             <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
@@ -430,6 +558,20 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
               desc: 'A system-prompt switch transforms Study Buddy from a direct answering model into a Socratic guide that never gives answers directly — it asks leading questions to promote active recall and deeper understanding.',
               tag: 'Prompt Engineering',
               tagColor: 'bg-teal-50 text-teal-700',
+            },
+            {
+              icon: '📝',
+              title: 'AI Study Notes (NLG)',
+              desc: 'Structured study notes generated on demand per topic using Gemini with a JSON schema: summary, key concepts (term+definition pairs), examples, common mistakes, and a memory tip. Cached server-side.',
+              tag: 'Natural Language Generation',
+              tagColor: 'bg-indigo-50 text-indigo-700',
+            },
+            {
+              icon: '📉',
+              title: 'Forgetting Curve (Ebbinghaus)',
+              desc: 'For each reviewed topic, retention R is estimated using R = e^(–t/S) where t = days since last review and S = SM-2 interval (stability). Sorted by lowest retention to surface topics that need immediate review.',
+              tag: 'Cognitive Modelling · Math',
+              tagColor: 'bg-rose-50 text-rose-700',
             },
           ].map((item) => (
             <div key={item.title} className="flex gap-4 p-4 rounded-2xl bg-[#F5F5F0]">

@@ -71,11 +71,14 @@ import {
   getExamSettings,
   savePracticeHistory,
   getPracticeHistory,
+  saveWeeklyGoal,
+  getWeeklyGoal,
   StudySession,
   SM2Card,
   TopicMastery,
   ExamSettings,
   PracticeExamResult,
+  WeeklyGoal,
 } from './lib/storage';
 import type { Topic, Unit, Chapter, Flashcard } from './services/gemini';
 import { cn } from './lib/utils';
@@ -170,6 +173,7 @@ export default function App() {
   const [currentTopicId, setCurrentTopicId] = useState<string | null>(null);
   const [examSettings, setExamSettings] = useState<ExamSettings | null>(null);
   const [practiceHistory, setPracticeHistory] = useState<PracticeExamResult[]>([]);
+  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatTime = (seconds: number) => {
@@ -255,7 +259,7 @@ export default function App() {
 
   useEffect(() => {
     const loadData = async () => {
-      const [localPlans, localProgress, localSessions, localScheduled, localSm2, localMastery, localExam, localPractice] = await Promise.all([
+      const [localPlans, localProgress, localSessions, localScheduled, localSm2, localMastery, localExam, localPractice, localGoal] = await Promise.all([
         getLocalPlans(),
         getLocalProgress(),
         getStudySessions(),
@@ -264,6 +268,7 @@ export default function App() {
         getMasteryData(),
         getExamSettings(),
         getPracticeHistory(),
+        getWeeklyGoal(),
       ]);
       if (localPlans) setPlans(localPlans);
       if (localProgress) setProgress(localProgress);
@@ -273,6 +278,7 @@ export default function App() {
       if (localScheduled) setScheduledTopics(localScheduled);
       if (localExam) setExamSettings(localExam);
       if (localPractice && localPractice.length) setPracticeHistory(localPractice);
+      if (localGoal) setWeeklyGoal(localGoal);
       setLoading(false);
     };
     loadData();
@@ -546,6 +552,11 @@ export default function App() {
     }
   };
 
+  const handleSaveWeeklyGoal = (goal: WeeklyGoal) => {
+    setWeeklyGoal(goal);
+    saveWeeklyGoal(goal);
+  };
+
   const handleSaveExamSettings = (settings: ExamSettings) => {
     setExamSettings(settings);
     saveExamSettings(settings);
@@ -692,9 +703,11 @@ export default function App() {
               setShowCelebration={setShowCelebration}
               studySessions={studySessions}
               handleSavePracticeResult={handleSavePracticeResult}
+              weeklyGoal={weeklyGoal}
+              handleSaveWeeklyGoal={handleSaveWeeklyGoal}
             />
           } />
-          <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} masteryData={masteryData} examSettings={examSettings} handleSaveExamSettings={handleSaveExamSettings} practiceHistory={practiceHistory} />} />
+          <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} masteryData={masteryData} examSettings={examSettings} handleSaveExamSettings={handleSaveExamSettings} practiceHistory={practiceHistory} sm2Cards={sm2Cards} />} />
           <Route path="/rooms" element={<StudyRooms />} />
           <Route path="/buddy" element={<StudyBuddy fileId={fileId} />} />
           <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} />} />
