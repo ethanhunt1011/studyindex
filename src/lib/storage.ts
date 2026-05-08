@@ -9,6 +9,8 @@ const STORAGE_KEYS = {
   SCHEDULED: 'scheduled_sessions',
   SM2: 'sm2_cards',
   MASTERY: 'topic_mastery',
+  EXAM_SETTINGS: 'exam_settings',
+  PRACTICE_HISTORY: 'practice_history',
 };
 
 // ─── SM-2 Spaced Repetition ───────────────────────────────────────────────────
@@ -240,4 +242,44 @@ export const getScheduledSessions = async (): Promise<any[]> => {
 
 export const clearLocalData = async () => {
   await Promise.all(Object.values(STORAGE_KEYS).map(k => Preferences.remove({ key: k })));
+};
+
+// ─── Exam Settings ────────────────────────────────────────────────────────────
+export interface ExamSettings {
+  examDate: string; // 'YYYY-MM-DD'
+  examName: string;
+}
+
+export const saveExamSettings = async (settings: ExamSettings) => {
+  try { await Preferences.set({ key: STORAGE_KEYS.EXAM_SETTINGS, value: JSON.stringify(settings) }); }
+  catch (e) { console.error('Failed to save exam settings:', e); }
+};
+
+export const getExamSettings = async (): Promise<ExamSettings | null> => {
+  try {
+    const { value } = await Preferences.get({ key: STORAGE_KEYS.EXAM_SETTINGS });
+    return value ? JSON.parse(value) : null;
+  } catch { return null; }
+};
+
+// ─── Practice Exam History ────────────────────────────────────────────────────
+export interface PracticeExamResult {
+  id: string;
+  topicId: string;
+  topicTitle: string;
+  score: number;       // 0–100
+  totalQuestions: number;
+  date: string;        // 'YYYY-MM-DD'
+}
+
+export const savePracticeHistory = async (history: PracticeExamResult[]) => {
+  try { await Preferences.set({ key: STORAGE_KEYS.PRACTICE_HISTORY, value: JSON.stringify(history) }); }
+  catch (e) { console.error('Failed to save practice history:', e); }
+};
+
+export const getPracticeHistory = async (): Promise<PracticeExamResult[]> => {
+  try {
+    const { value } = await Preferences.get({ key: STORAGE_KEYS.PRACTICE_HISTORY });
+    return value ? JSON.parse(value) : [];
+  } catch { return []; }
 };

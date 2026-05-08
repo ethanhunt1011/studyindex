@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Trophy,
   Zap,
+  GraduationCap,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -330,6 +331,290 @@ const ScheduleModal = ({
   );
 };
 
+// ─── Practice Exam Modal ──────────────────────────────────────────────────────
+interface PracticeQuestion {
+  id: number;
+  type: 'mcq' | 'short';
+  question: string;
+  options?: string[];
+  correctAnswer: string;
+  explanation: string;
+}
+
+const PracticeExamModal = ({
+  topic,
+  onClose,
+  onSaveResult,
+}: {
+  topic: any;
+  onClose: () => void;
+  onSaveResult: (r: { topicId: string; topicTitle: string; score: number; totalQuestions: number }) => void;
+}) => {
+  const [phase, setPhase] = useState<'loading' | 'question' | 'feedback' | 'final'>('loading');
+  const [questions, setQuestions] = useState<PracticeQuestion[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [currentQ, setCurrentQ] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, { answer: string; score: number; feedback: string; isCorrect: boolean }>>({});
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [shortAnswerText, setShortAnswerText] = useState('');
+  const [gradingShort, setGradingShort] = useState(false);
+  const [currentFeedback, setCurrentFeedback] = useState<{ isCorrect: boolean; feedback: string; score: number } | null>(null);
+  const [finalScore, setFinalScore] = useState(0);
+
+  React.useEffect(() => {
+    fetch('/api/practice-exam', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topicTitle: topic.title, context: topic.dailyExercise || '' }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        setQuestions(data.questions || []);
+        setPhase('question');
+      })
+      .catch((err: any) => setError(err.message || 'Failed to generate exam'));
+  }, []);
+
+  const q = questions[currentQ];
+
+  const handleMCQSelect = (option: string) => {
+    if (phase !== 'question') return;
+    setSelectedOption(option);
+    const isCorrect = option === q.correctAnswer;
+    const result = { answer: option, score: isCorrect ? 1 : 0, feedback: q.explanation, isCorrect };
+    setAnswers(prev => ({ ...prev, [currentQ]: result }));
+    setCurrentFeedback(result);
+    setPhase('feedback');
+  };
+
+  const handleShortSubmit = async () => {
+    if (!shortAnswerText.trim() || gradingShort) return;
+    setGradingShort(true);
+    try {
+      const r = await fetch('/api/grade-answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q.question, correctAnswer: q.correctAnswer, userAnswer: shortAnswerText }),
+      });
+      const data = await r.json();
+      const result = { answer: shortAnswerText, score: data.score ?? 0, feedback: data.feedback ?? '', isCorrect: data.isCorrect ?? false };
+      setAnswers(prev => ({ ...prev, [currentQ]: result }));
+      setCurrentFeedback(result);
+    } catch {
+      const result = { answer: shortAnswerText, score: 0, feedback: 'Could not auto-grade. Review the model answer yourself.', isCorrect: false };
+      setAnswers(prev => ({ ...prev, [currentQ]: result }));
+      setCurrentFeedback(result);
+    }
+    setGradingShort(false);
+    setPhase('feedback');
+  };
+
+  const handleNext = () => {
+    if (currentQ < questions.length - 1) {
+      setCurrentQ(p => p + 1);
+      setSelectedOption(null);
+      setShortAnswerText('');
+      setCurrentFeedback(null);
+      setPhase('question');
+    } else {
+      const total = Object.values(answers).reduce((s, a) => s + (a.score || 0), 0);
+      const pct = Math.round((total / questions.length) * 100);
+      setFinalScore(pct);
+      onSaveResult({ topicId: topic.id, topicTitle: topic.title, score: pct, totalQuestions: questions.length });
+      setPhase('final');
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 overflow-y-auto py-8"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+          className="bg-white rounded-[40px] p-8 max-w-md w-full shadow-2xl relative"
+          onClick={e => e.stopPropagation()}
+        >
+          <button onClick={onClose} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 transition-colors">
+            <X className="w-5 h-5 text-[#5A5A40]" />
+          </button>
+
+          {phase === 'loading' && !error && (
+            <div className="py-16 flex flex-col items-center gap-4">
+              <div className="w-12 h-12 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center">
+                <GraduationCap className="w-6 h-6 text-[#5A5A40]" />
+              </div>
+              <Loader2 className="w-8 h-8 animate-spin text-[#5A5A40]" />
+              <p className="text-sm text-[#5A5A40]/60 text-center">
+                Generating exam for<br />
+                <span className="font-bold text-[#1A1A1A]">{topic.title}</span>
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="py-8 text-center">
+              <p className="text-red-500 text-sm mb-4">{error}</p>
+              <button onClick={onClose} className="px-6 py-2 bg-gray-100 rounded-xl text-sm font-bold">Close</button>
+            </div>
+          )}
+
+          {(phase === 'question' || phase === 'feedback') && q && (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 bg-[#5A5A40] rounded-xl flex items-center justify-center shrink-0">
+                  <GraduationCap className="w-4 h-4 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-bold text-sm text-[#1A1A1A]">Practice Exam</span>
+                  <p className="text-[10px] text-[#5A5A40]/50 truncate">{topic.title}</p>
+                </div>
+                <span className="text-xs text-[#5A5A40]/50 shrink-0">{currentQ + 1} / {questions.length}</span>
+              </div>
+
+              <div className="h-1.5 bg-gray-100 rounded-full mb-5 overflow-hidden">
+                <div
+                  className="h-full bg-[#5A5A40] rounded-full transition-all duration-500"
+                  style={{ width: `${((currentQ + (phase === 'feedback' ? 1 : 0)) / questions.length) * 100}%` }}
+                />
+              </div>
+
+              <span className={cn(
+                "inline-block text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md mb-3",
+                q.type === 'mcq' ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
+              )}>
+                {q.type === 'mcq' ? 'Multiple Choice' : 'Short Answer'}
+              </span>
+
+              <p className="font-semibold text-[#1A1A1A] leading-relaxed mb-5">{q.question}</p>
+
+              {q.type === 'mcq' && q.options && (
+                <div className="space-y-2 mb-4">
+                  {q.options.map((opt, i) => {
+                    let cls = "border-[#1A1A1A]/10 bg-gray-50 hover:bg-gray-100 text-[#1A1A1A] cursor-pointer active:scale-[0.98]";
+                    if (phase === 'feedback') {
+                      if (opt === q.correctAnswer) cls = "border-green-300 bg-green-50 text-green-800 cursor-default";
+                      else if (opt === selectedOption) cls = "border-red-300 bg-red-50 text-red-800 cursor-default";
+                      else cls = "border-gray-100 bg-gray-50 text-gray-300 cursor-default";
+                    }
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => handleMCQSelect(opt)}
+                        disabled={phase === 'feedback'}
+                        className={cn("w-full text-left px-4 py-3 rounded-2xl border text-sm font-medium transition-all", cls)}
+                      >
+                        <span className="font-bold mr-2 opacity-40">{['A', 'B', 'C', 'D'][i]}.</span>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {q.type === 'short' && phase === 'question' && (
+                <div className="mb-4">
+                  <textarea
+                    value={shortAnswerText}
+                    onChange={e => setShortAnswerText(e.target.value)}
+                    placeholder="Type your answer here..."
+                    className="w-full p-4 rounded-2xl border border-gray-200 bg-gray-50 text-sm resize-none h-28 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
+                  />
+                  <button
+                    onClick={handleShortSubmit}
+                    disabled={!shortAnswerText.trim() || gradingShort}
+                    className="w-full mt-2 py-3 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {gradingShort ? <><Loader2 className="w-4 h-4 animate-spin" /> Grading…</> : 'Submit Answer'}
+                  </button>
+                </div>
+              )}
+
+              {q.type === 'short' && phase === 'feedback' && (
+                <div className="mb-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#5A5A40]/40 mb-1">Your Answer</p>
+                  <p className="text-sm text-[#1A1A1A]">{shortAnswerText}</p>
+                </div>
+              )}
+
+              {phase === 'feedback' && currentFeedback && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  className={cn("p-4 rounded-2xl mb-4 border", currentFeedback.isCorrect ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100")}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-lg">{currentFeedback.isCorrect ? '✅' : currentFeedback.score > 0 ? '🟡' : '❌'}</span>
+                    <span className={cn("font-bold text-sm", currentFeedback.isCorrect ? "text-green-700" : "text-red-700")}>
+                      {currentFeedback.isCorrect ? 'Correct!' : currentFeedback.score > 0 ? 'Partially correct' : 'Incorrect'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed">{currentFeedback.feedback}</p>
+                  {!currentFeedback.isCorrect && q.type === 'mcq' && (
+                    <p className="text-xs text-green-700 font-semibold mt-1.5">Correct: {q.correctAnswer}</p>
+                  )}
+                </motion.div>
+              )}
+
+              {phase === 'feedback' && (
+                <button
+                  onClick={handleNext}
+                  className="w-full py-3.5 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] transition-colors active:scale-[0.98]"
+                >
+                  {currentQ < questions.length - 1 ? 'Next Question →' : 'See Results'}
+                </button>
+              )}
+            </>
+          )}
+
+          {phase === 'final' && (
+            <div className="text-center py-2">
+              <motion.div
+                initial={{ scale: 0 }} animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                className="text-5xl mb-4"
+              >
+                {finalScore >= 80 ? '🎉' : finalScore >= 60 ? '👍' : '📚'}
+              </motion.div>
+              <h2 className="text-2xl font-serif font-bold text-[#1A1A1A] mb-1">
+                {finalScore >= 80 ? 'Excellent!' : finalScore >= 60 ? 'Good work!' : 'Keep practising!'}
+              </h2>
+              <p className="text-sm text-[#5A5A40]/60 mb-4 truncate px-4">{topic.title}</p>
+              <div className={cn(
+                "inline-block text-4xl font-serif font-bold px-8 py-3 rounded-2xl mb-6",
+                finalScore >= 80 ? "bg-green-50 text-green-700" : finalScore >= 60 ? "bg-yellow-50 text-yellow-700" : "bg-red-50 text-red-700"
+              )}>
+                {finalScore}%
+              </div>
+              <div className="space-y-2 mb-6 text-left">
+                {questions.map((qn, i) => {
+                  const a = answers[i];
+                  return (
+                    <div key={i} className={cn("flex items-center gap-2 p-3 rounded-xl", a?.isCorrect ? "bg-green-50" : (a?.score || 0) > 0 ? "bg-yellow-50" : "bg-red-50")}>
+                      <span className="text-base shrink-0">{a?.isCorrect ? '✅' : (a?.score || 0) > 0 ? '🟡' : '❌'}</span>
+                      <p className="text-xs text-[#1A1A1A] font-medium flex-1 line-clamp-1">{qn.question}</p>
+                      <span className="text-xs font-bold shrink-0 tabular-nums">{Math.round((a?.score || 0) * 100)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <button
+                onClick={onClose}
+                className="w-full py-4 rounded-2xl bg-[#5A5A40] text-white font-semibold hover:bg-[#4A4A30] transition-colors active:scale-[0.98]"
+              >
+                Done
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export const DashboardContent = ({
   user,
@@ -380,8 +665,14 @@ export const DashboardContent = ({
   sm2Cards,
   masteryData,
   currentTopicId,
+  handleSavePracticeResult,
 }: any) => {
   const isDark = isDeepFocus || theme === 'dark';
+
+  // ── Practice exam local state ────────────────────────────────────────────
+  const [showPracticeExam, setShowPracticeExam] = useState(false);
+  const [practiceExamTopic, setPracticeExamTopic] = useState<any>(null);
+  const [drillCaughtUp, setDrillCaughtUp] = useState(false);
 
   // ── Derived data ────────────────────────────────────────────────────────────
   const allTopics = (plans || []).flatMap((plan: any) => {
@@ -405,6 +696,30 @@ export const DashboardContent = ({
   const topicsForToday = uncompletedTopics.slice(0, topicsForDayCount);
   const completedTopicsLog = allTopics.filter((t: any) => t.isCompleted);
 
+  // ── SM-2 helpers ─────────────────────────────────────────────────────────────
+  const getDueCardCount = (topicId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    return Object.values(sm2Cards || {}).filter((c: any) => c.topicId === topicId && c.dueDate <= today).length;
+  };
+
+  const handleDrillMode = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const candidates = allTopics
+      .map((t: any) => ({
+        topic: t,
+        dueCount: Object.values(sm2Cards || {}).filter((c: any) => c.topicId === t.id && c.dueDate <= today).length,
+      }))
+      .filter(x => x.dueCount > 0)
+      .sort((a, b) => b.dueCount - a.dueCount);
+
+    if (!candidates.length) {
+      setDrillCaughtUp(true);
+      setTimeout(() => setDrillCaughtUp(false), 3000);
+      return;
+    }
+    handleGenerateFlashcards(candidates[0].topic);
+  };
+
   // ── Quick stats ─────────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySessions = (studySessions || []).filter((s: any) => s.date === todayStr);
@@ -421,6 +736,26 @@ export const DashboardContent = ({
         <CelebrationModal
           focusMinutes={profile?.focusTime || 25}
           onClose={() => setShowCelebration(false)}
+        />
+      )}
+
+      {/* Drill mode "all caught up" toast */}
+      <AnimatePresence>
+        {drillCaughtUp && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#1A1A1A] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 text-sm font-semibold"
+          >
+            <CheckCircle2 className="w-4 h-4 text-green-400" /> All caught up! No cards due today.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {showPracticeExam && practiceExamTopic && (
+        <PracticeExamModal
+          topic={practiceExamTopic}
+          onClose={() => { setShowPracticeExam(false); setPracticeExamTopic(null); }}
+          onSaveResult={(r) => { if (handleSavePracticeResult) handleSavePracticeResult(r); }}
         />
       )}
 
@@ -637,9 +972,22 @@ export const DashboardContent = ({
 
         {/* ── Topics for the Day ───────────────────────────────────────────── */}
         <section className="mb-10">
-          <h3 className={cn("text-xl font-serif font-bold mb-6", isDark ? "text-white" : "text-[#1A1A1A]")}>
-            Topics for the Day
-          </h3>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className={cn("text-xl font-serif font-bold", isDark ? "text-white" : "text-[#1A1A1A]")}>
+              Topics for the Day
+            </h3>
+            <button
+              onClick={handleDrillMode}
+              className={cn(
+                "flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full transition-colors",
+                isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#5A5A40]/10 text-[#5A5A40] hover:bg-[#5A5A40]/20"
+              )}
+              title="Drill Mode — practice your overdue SM-2 cards"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Drill Mode
+            </button>
+          </div>
           <div className="space-y-4">
             {topicsForToday.length > 0 ? (
               topicsForToday.map((topic: any) => (
@@ -654,7 +1002,14 @@ export const DashboardContent = ({
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <h4 className={cn("font-bold truncate", isDark ? "text-white" : "text-[#1A1A1A]")}>{topic.title}</h4>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className={cn("font-bold truncate", isDark ? "text-white" : "text-[#1A1A1A]")}>{topic.title}</h4>
+                        {getDueCardCount(topic.id) > 0 && (
+                          <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">
+                            {getDueCardCount(topic.id)} due
+                          </span>
+                        )}
+                      </div>
                       <p className={cn("text-sm mt-0.5", isDark ? "text-gray-400" : "text-[#5A5A40]")}>
                         {topic.bookTitle} · {topic.chapterTitle}
                       </p>
@@ -665,6 +1020,17 @@ export const DashboardContent = ({
                       )}
                     </div>
                     <div className="flex gap-2 shrink-0">
+                      {/* Practice Exam button */}
+                      <button
+                        onClick={() => { setPracticeExamTopic(topic); setShowPracticeExam(true); }}
+                        className={cn(
+                          "p-2.5 rounded-full transition-colors",
+                          isDark ? "bg-white/10 hover:bg-white/20 text-purple-300" : "bg-purple-50 hover:bg-purple-100 text-purple-600"
+                        )}
+                        title="Practice Exam"
+                      >
+                        <GraduationCap className="w-4 h-4" />
+                      </button>
                       {/* Flashcard button */}
                       <button
                         onClick={() => handleGenerateFlashcards(topic)}
@@ -907,16 +1273,34 @@ export const DashboardContent = ({
                                           </button>
                                           <div className="flex-1 min-w-0">
                                             <div className="flex items-start justify-between gap-2">
-                                              <h6 className={cn("font-bold text-base", isCompleted && "line-through", isDark ? "text-white" : "text-[#1A1A1A]")}>
-                                                {topic.title}
-                                              </h6>
-                                              <button
-                                                onClick={() => handleGenerateFlashcards(topic)}
-                                                className={cn("p-1.5 rounded-full shrink-0 transition-colors", isDark ? "hover:bg-white/10 text-yellow-300" : "hover:bg-yellow-50 text-yellow-500")}
-                                                title="Flashcards"
-                                              >
-                                                <Sparkles className="w-3.5 h-3.5" />
-                                              </button>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                  <h6 className={cn("font-bold text-base", isCompleted && "line-through", isDark ? "text-white" : "text-[#1A1A1A]")}>
+                                                    {topic.title}
+                                                  </h6>
+                                                  {getDueCardCount(topic.id) > 0 && (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full shrink-0">
+                                                      {getDueCardCount(topic.id)} due
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                  onClick={() => { setPracticeExamTopic(topic); setShowPracticeExam(true); }}
+                                                  className={cn("p-1.5 rounded-full transition-colors", isDark ? "hover:bg-white/10 text-purple-300" : "hover:bg-purple-50 text-purple-500")}
+                                                  title="Practice Exam"
+                                                >
+                                                  <GraduationCap className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  onClick={() => handleGenerateFlashcards(topic)}
+                                                  className={cn("p-1.5 rounded-full shrink-0 transition-colors", isDark ? "hover:bg-white/10 text-yellow-300" : "hover:bg-yellow-50 text-yellow-500")}
+                                                  title="Flashcards"
+                                                >
+                                                  <Sparkles className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
                                             </div>
 
                                             <div className="flex flex-wrap gap-2 mt-2">

@@ -398,7 +398,7 @@ app.post("/api/flashcards", rateLimiter, async (req, res) => {
 
 // ─── /api/chat (RAG-enhanced) ─────────────────────────────────────────────────
 app.post("/api/chat", rateLimiter, async (req, res) => {
-  const { input, fileId } = req.body;
+  const { input, fileId, socraticMode } = req.body;
   const fileData = fileId ? fileContents.get(fileId) : null;
   const apiKey = getApiKey();
   if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
@@ -440,7 +440,9 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
       model: 'gemini-2.5-flash',
       contents: { parts: contents },
       config: {
-        systemInstruction: "You are a helpful study buddy. Answer questions based on the provided context if available, otherwise answer generally. Be concise and educational."
+        systemInstruction: socraticMode
+          ? "You are a Socratic AI tutor. NEVER give direct answers or solutions. Instead, guide the student to discover the answer themselves through leading questions. Ask things like 'What do you think happens when...?', 'Can you connect this to...?', 'What would occur if...?'. Be patient and encouraging. If the student is completely stuck, give a small hint only."
+          : "You are a helpful study buddy. Answer questions based on the provided context if available, otherwise answer generally. Be concise and educational."
       }
     });
     const text = response.text || "";
@@ -450,6 +452,92 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
   } catch (error: any) {
     console.error('Error in /api/chat:', error);
     res.status(500).json({ error: error?.message || 'Error generating response.' });
+  }
+});
+
+// ─── /api/practice-exam ──────────────────────────────────────────────────────
+app.post("/api/practice-exam", rateLimiter, async (req, res) => {
+  const { topicTitle, context } = req.body;
+  if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
+
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+    const ai = new GoogleGenAI({ apiKey });
+    const prompt = `Create a practice exam for the topic: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+Generate exactly 4 multiple-choice questions and 1 short-answer question.
+For each MCQ: provide exactly 4 answer options (as an array). The correctAnswer field must be the FULL TEXT of the correct option, matching exactly one option in the array.
+Make questions progressively harder. Be specific, clear, and educational.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            questions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id:            { type: Type.NUMBER },
+                  type:          { type: Type.STRING },
+                  question:      { type: Type.STRING },
+                  options:       { type: Type.ARRAY, items: { type: Type.STRING } },
+                  correctAnswer: { type: Type.STRING },
+                  explanation:   { type: Type.STRING },
+                },
+                required: ["id", "type", "question", "correctAnswer", "explanation"]
+              }
+            }
+          },
+          required: ["questions"]
+        }
+      }
+    });
+    res.json(JSON.parse(response.text || '{"questions":[]}'));
+  } catch (error: any) {
+    console.error('Error in /api/practice-exam:', error);
+    res.status(500).json({ error: error?.message || 'Error generating practice exam.' });
+  }
+});
+
+// ─── /api/grade-answer ───────────────────────────────────────────────────────
+app.post("/api/grade-answer", rateLimiter, async (req, res) => {
+  const { question, correctAnswer, userAnswer } = req.body;
+  if (!question || !userAnswer) return res.status(400).json({ error: "question and userAnswer required" });
+
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `You are grading a student's short-answer response.
+Question: "${question}"
+Model Answer: "${correctAnswer}"
+Student's Answer: "${userAnswer}"
+Grade fairly. Partial credit (score 0.5) is allowed for partially correct answers. Score 1 = correct, 0.5 = partial, 0 = incorrect.
+Provide brief, encouraging feedback (2 sentences max).`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score:     { type: Type.NUMBER },
+            isCorrect: { type: Type.BOOLEAN },
+            feedback:  { type: Type.STRING },
+          },
+          required: ["score", "isCorrect", "feedback"]
+        }
+      }
+    });
+    res.json(JSON.parse(response.text || '{"score":0,"isCorrect":false,"feedback":""}'));
+  } catch (error: any) {
+    console.error('Error in /api/grade-answer:', error);
+    res.status(500).json({ error: error?.message || 'Error grading answer.' });
   }
 });
 

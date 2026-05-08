@@ -67,9 +67,15 @@ import {
   getMasteryData,
   sm2Update,
   sm2NewCard,
+  saveExamSettings,
+  getExamSettings,
+  savePracticeHistory,
+  getPracticeHistory,
   StudySession,
   SM2Card,
   TopicMastery,
+  ExamSettings,
+  PracticeExamResult,
 } from './lib/storage';
 import type { Topic, Unit, Chapter, Flashcard } from './services/gemini';
 import { cn } from './lib/utils';
@@ -162,6 +168,8 @@ export default function App() {
   const [sm2Cards, setSm2Cards] = useState<Record<string, SM2Card>>({});
   const [masteryData, setMasteryData] = useState<Record<string, TopicMastery>>({});
   const [currentTopicId, setCurrentTopicId] = useState<string | null>(null);
+  const [examSettings, setExamSettings] = useState<ExamSettings | null>(null);
+  const [practiceHistory, setPracticeHistory] = useState<PracticeExamResult[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatTime = (seconds: number) => {
@@ -247,13 +255,15 @@ export default function App() {
 
   useEffect(() => {
     const loadData = async () => {
-      const [localPlans, localProgress, localSessions, localScheduled, localSm2, localMastery] = await Promise.all([
+      const [localPlans, localProgress, localSessions, localScheduled, localSm2, localMastery, localExam, localPractice] = await Promise.all([
         getLocalPlans(),
         getLocalProgress(),
         getStudySessions(),
         getScheduledSessions(),
         getAllSM2Cards(),
         getMasteryData(),
+        getExamSettings(),
+        getPracticeHistory(),
       ]);
       if (localPlans) setPlans(localPlans);
       if (localProgress) setProgress(localProgress);
@@ -261,6 +271,8 @@ export default function App() {
       if (localMastery && Object.keys(localMastery).length) setMasteryData(localMastery);
       if (localSessions) setStudySessions(localSessions);
       if (localScheduled) setScheduledTopics(localScheduled);
+      if (localExam) setExamSettings(localExam);
+      if (localPractice && localPractice.length) setPracticeHistory(localPractice);
       setLoading(false);
     };
     loadData();
@@ -534,6 +546,24 @@ export default function App() {
     }
   };
 
+  const handleSaveExamSettings = (settings: ExamSettings) => {
+    setExamSettings(settings);
+    saveExamSettings(settings);
+  };
+
+  const handleSavePracticeResult = (result: Omit<PracticeExamResult, 'id' | 'date'>) => {
+    const newResult: PracticeExamResult = {
+      ...result,
+      id: Date.now().toString(),
+      date: new Date().toISOString().split('T')[0],
+    };
+    setPracticeHistory(prev => {
+      const updated = [newResult, ...prev].slice(0, 50); // keep last 50 results
+      savePracticeHistory(updated);
+      return updated;
+    });
+  };
+
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!profile) return;
     const updatedProfile = { ...profile, ...updates };
@@ -661,9 +691,10 @@ export default function App() {
               showCelebration={showCelebration}
               setShowCelebration={setShowCelebration}
               studySessions={studySessions}
+              handleSavePracticeResult={handleSavePracticeResult}
             />
           } />
-          <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} />} />
+          <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} masteryData={masteryData} examSettings={examSettings} handleSaveExamSettings={handleSaveExamSettings} practiceHistory={practiceHistory} />} />
           <Route path="/rooms" element={<StudyRooms />} />
           <Route path="/buddy" element={<StudyBuddy fileId={fileId} />} />
           <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} />} />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { saveLocalChats, getLocalChats } from '../lib/storage';
-import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2, BrainCircuit } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2, BrainCircuit, GraduationCap, TrendingUp, Brain, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 export { Dashboard } from './Dashboard';
 export { Login } from './Login';
 
@@ -12,9 +12,17 @@ interface AnalyticsProps {
   plans?: any[];
   progress?: Record<string, any>;
   profile?: any;
+  masteryData?: Record<string, any>;
+  examSettings?: any;
+  handleSaveExamSettings?: (s: any) => void;
+  practiceHistory?: any[];
 }
 
-export const Analytics = ({ studySessions = [], plans = [], progress = {}, profile }: AnalyticsProps) => {
+export const Analytics = ({ studySessions = [], plans = [], progress = {}, profile, masteryData = {}, examSettings, handleSaveExamSettings, practiceHistory = [] }: AnalyticsProps) => {
+  const [editingExam, setEditingExam] = useState(false);
+  const [examNameInput, setExamNameInput] = useState(examSettings?.examName || '');
+  const [examDateInput, setExamDateInput] = useState(examSettings?.examDate || '');
+  const [showAllWeakTopics, setShowAllWeakTopics] = useState(false);
   // ── Compute stats ────────────────────────────────────────────────────────
   const totalMinutes = studySessions.reduce((s: number, x: any) => s + (x.durationMinutes || 0), 0);
   const totalHours = (totalMinutes / 60).toFixed(1);
@@ -59,11 +67,157 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
 
   const hasData = studySessions.length > 0 || plans.length > 0;
 
+  // ── Exam Readiness computation ───────────────────────────────────────────
+  const allTopicsFlat = (plans || []).flatMap((p: any) =>
+    (p.units || []).flatMap((u: any) =>
+      (u.chapters || []).flatMap((c: any) => c.topics || [])
+    )
+  );
+  const completedIds = Object.values(progress).flatMap((p: any) => p.completedTopicIds || []);
+  const completionPct = allTopicsFlat.length > 0 ? (completedIds.length / allTopicsFlat.length) * 100 : 0;
+  const avgMastery = allTopicsFlat.length > 0
+    ? allTopicsFlat.reduce((sum: number, t: any) => sum + (masteryData[t.id]?.score || 0), 0) / allTopicsFlat.length
+    : 0;
+  const readinessPct = Math.round(completionPct * 0.6 + avgMastery * 0.4);
+
+  const daysUntilExam = examSettings?.examDate
+    ? Math.ceil((new Date(examSettings.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  const weakTopics = [...allTopicsFlat]
+    .filter((t: any) => masteryData[t.id])
+    .sort((a: any, b: any) => (masteryData[a.id]?.score ?? 100) - (masteryData[b.id]?.score ?? 100));
+
+  const readinessColor = readinessPct >= 70 ? 'text-green-700' : readinessPct >= 40 ? 'text-yellow-700' : 'text-red-700';
+  const readinessBg = readinessPct >= 70 ? 'bg-green-50 border-green-100' : readinessPct >= 40 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100';
+  const readinessFill = readinessPct >= 70 ? 'bg-green-500' : readinessPct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+
+  // ── Last 63 days heatmap ─────────────────────────────────────────────────
+  const heatmapDays: { date: string; minutes: number }[] = [];
+  for (let i = 62; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    const minutes = studySessions.filter((s: any) => s.date === dateStr).reduce((sum: number, s: any) => sum + (s.durationMinutes || 0), 0);
+    heatmapDays.push({ date: dateStr, minutes });
+  }
+  const maxHeatmap = Math.max(...heatmapDays.map(d => d.minutes), 1);
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-serif font-bold text-[#1A1A1A]">Analytics</h1>
         <p className="text-sm text-[#5A5A40]/60 mt-1">Track your study progress over time</p>
+      </div>
+
+      {/* ── Exam Readiness Predictor — always visible ──────────────────────── */}
+      <div className={cn("bg-white rounded-[32px] border shadow-sm p-6", examSettings?.examDate ? readinessBg : "border-gray-100")}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-[#5A5A40]" />
+            <h2 className="font-bold text-[#1A1A1A]">Exam Readiness</h2>
+          </div>
+          <button
+            onClick={() => { setEditingExam(!editingExam); setExamNameInput(examSettings?.examName || ''); setExamDateInput(examSettings?.examDate || ''); }}
+            className="text-xs font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] transition-colors"
+          >
+            {examSettings?.examDate ? 'Edit' : '+ Set Exam Date'}
+          </button>
+        </div>
+
+        {editingExam && (
+          <div className="space-y-3 mb-5 p-4 bg-[#F5F5F0] rounded-2xl">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 block mb-1">Exam Name</label>
+              <input
+                type="text"
+                value={examNameInput}
+                onChange={e => setExamNameInput(e.target.value)}
+                placeholder="e.g. Final Exam, IELTS..."
+                className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 block mb-1">Exam Date</label>
+              <input
+                type="date"
+                value={examDateInput}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={e => setExamDateInput(e.target.value)}
+                className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
+              />
+            </div>
+            <button
+              onClick={() => { if (handleSaveExamSettings && examDateInput) { handleSaveExamSettings({ examDate: examDateInput, examName: examNameInput || 'Exam' }); setEditingExam(false); } }}
+              disabled={!examDateInput}
+              className="w-full py-2 rounded-xl bg-[#5A5A40] text-white text-sm font-bold disabled:opacity-50 hover:bg-[#4A4A30] transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        )}
+
+        {examSettings?.examDate ? (
+          <>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-[#1A1A1A]">{examSettings.examName || 'Exam'}</span>
+                  <span className={cn("font-bold text-sm", readinessColor)}>{readinessPct}% ready</span>
+                </div>
+                <div className="h-3 bg-white/60 rounded-full overflow-hidden border border-white/40">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${readinessPct}%` }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                    className={cn("h-full rounded-full", readinessFill)}
+                  />
+                </div>
+                <div className="flex justify-between mt-1.5 text-[10px] text-[#5A5A40]/60">
+                  <span>Completion: {Math.round(completionPct)}%</span>
+                  <span>Avg Mastery: {Math.round(avgMastery)}%</span>
+                </div>
+              </div>
+              {daysUntilExam !== null && (
+                <div className="text-center shrink-0">
+                  <div className={cn("text-3xl font-serif font-bold", daysUntilExam <= 7 ? 'text-red-600' : daysUntilExam <= 14 ? 'text-yellow-600' : 'text-green-600')}>
+                    {daysUntilExam > 0 ? daysUntilExam : 0}
+                  </div>
+                  <div className="text-[10px] text-[#5A5A40]/50 font-semibold">days left</div>
+                </div>
+              )}
+            </div>
+
+            {weakTopics.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Weakest Areas — Focus Here</p>
+                <div className="space-y-1.5">
+                  {(showAllWeakTopics ? weakTopics : weakTopics.slice(0, 3)).map((t: any) => (
+                    <div key={t.id} className="flex items-center justify-between bg-white/60 rounded-xl px-3 py-2">
+                      <span className="text-xs font-medium text-[#1A1A1A] truncate flex-1 mr-2">{t.title}</span>
+                      <span className={cn("text-xs font-bold shrink-0", masteryData[t.id]?.score >= 50 ? 'text-yellow-600' : 'text-red-600')}>
+                        {masteryData[t.id]?.score ?? 0}%
+                      </span>
+                    </div>
+                  ))}
+                  {weakTopics.length > 3 && (
+                    <button onClick={() => setShowAllWeakTopics(p => !p)} className="text-[10px] font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] flex items-center gap-1 mt-1">
+                      {showAllWeakTopics ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> {weakTopics.length - 3} more</>}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {allTopicsFlat.length === 0 && (
+              <p className="text-xs text-[#5A5A40]/60 italic">Upload a study plan to see topic-by-topic readiness.</p>
+            )}
+          </>
+        ) : (
+          !editingExam && (
+            <p className="text-sm text-[#5A5A40]/60 italic">Set your exam date to track readiness and see which topics need the most attention.</p>
+          )
+        )}
       </div>
 
       {!hasData && (
@@ -132,6 +286,36 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
             </div>
           </div>
 
+          {/* ── Study Activity Heatmap ──────────────────────────────────────── */}
+          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+            <h2 className="font-bold text-[#1A1A1A] mb-5">Study Activity — Last 63 Days</h2>
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {Array.from({ length: 9 }, (_, weekIdx) => (
+                <div key={weekIdx} className="flex flex-col gap-1 shrink-0">
+                  {heatmapDays.slice(weekIdx * 7, weekIdx * 7 + 7).map((day) => {
+                    const intensity = day.minutes > 0 ? Math.max(0.15, day.minutes / maxHeatmap) : 0;
+                    const isToday = day.date === new Date().toISOString().split('T')[0];
+                    return (
+                      <div
+                        key={day.date}
+                        title={`${day.date}: ${day.minutes} min`}
+                        className={cn("w-7 h-7 rounded-md transition-all", isToday && day.minutes === 0 ? "ring-2 ring-[#5A5A40]/30" : "")}
+                        style={{ backgroundColor: day.minutes > 0 ? `rgba(90, 90, 64, ${intensity})` : '#F0F0EC' }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 mt-3">
+              <span className="text-[10px] text-[#5A5A40]/40 font-medium">Less</span>
+              {[0.15, 0.35, 0.55, 0.75, 1].map(i => (
+                <div key={i} className="w-4 h-4 rounded-sm" style={{ backgroundColor: `rgba(90, 90, 64, ${i})` }} />
+              ))}
+              <span className="text-[10px] text-[#5A5A40]/40 font-medium">More</span>
+            </div>
+          </div>
+
           {/* ── Plan progress ─────────────────────────────────────────────────── */}
           {plans.length > 0 && (
             <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
@@ -159,6 +343,31 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Practice Exam History ─────────────────────────────────────────── */}
+          {practiceHistory.length > 0 && (
+            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <GraduationCap className="w-5 h-5 text-[#5A5A40]" />
+                <h2 className="font-bold text-[#1A1A1A]">Practice Exam History</h2>
+              </div>
+              <div className="space-y-2">
+                {practiceHistory.slice(0, 8).map((r: any) => (
+                  <div key={r.id} className="flex items-center gap-3 p-3 bg-[#F5F5F0] rounded-2xl">
+                    <span className="text-lg">{r.score >= 80 ? '🎉' : r.score >= 60 ? '👍' : '📚'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-[#1A1A1A] truncate">{r.topicTitle}</p>
+                      <p className="text-[10px] text-[#5A5A40]/50">{r.date} · {r.totalQuestions} questions</p>
+                    </div>
+                    <span className={cn(
+                      "text-sm font-bold shrink-0",
+                      r.score >= 80 ? "text-green-600" : r.score >= 60 ? "text-yellow-600" : "text-red-600"
+                    )}>{r.score}%</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -207,6 +416,20 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
               desc: 'Per-topic mastery is computed from cumulative SM-2 review outcomes (correct/total), displayed as a 0–100% score with colour-coded badges on topic cards.',
               tag: 'Knowledge Tracing',
               tagColor: 'bg-orange-50 text-orange-700',
+            },
+            {
+              icon: '📝',
+              title: 'AI Practice Exam + Auto-Grader',
+              desc: 'Gemini generates a 5-question exam (4 MCQ + 1 short-answer) per topic using structured JSON schema. MCQ is auto-graded instantly; short answers are graded by a second AI call that returns a 0/0.5/1 score with feedback.',
+              tag: 'LLM Evaluation · NLG',
+              tagColor: 'bg-red-50 text-red-700',
+            },
+            {
+              icon: '🧠',
+              title: 'Socratic Mode AI Tutor',
+              desc: 'A system-prompt switch transforms Study Buddy from a direct answering model into a Socratic guide that never gives answers directly — it asks leading questions to promote active recall and deeper understanding.',
+              tag: 'Prompt Engineering',
+              tagColor: 'bg-teal-50 text-teal-700',
             },
           ].map((item) => (
             <div key={item.title} className="flex gap-4 p-4 rounded-2xl bg-[#F5F5F0]">
@@ -344,6 +567,7 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
   const [loading, setLoading] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [ragInfo, setRagInfo] = useState<{ retrieved: number; enabled: boolean } | null>(null);
+  const [socraticMode, setSocraticMode] = useState(false);
 
   useEffect(() => {
     const loadChats = async () => {
@@ -416,7 +640,7 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: promptWithHistory, fileId }),
+        body: JSON.stringify({ input: promptWithHistory, fileId, socraticMode }),
       });
       
       if (!response.ok) {
@@ -518,13 +742,26 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
               Gemini 2.5 Flash · RAG Pipeline
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {ragInfo?.enabled && (
               <span className="text-[10px] font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                 RAG · {ragInfo.retrieved} chunks
               </span>
             )}
+            <button
+              onClick={() => setSocraticMode(p => !p)}
+              className={cn(
+                "text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all border",
+                socraticMode
+                  ? "bg-teal-50 text-teal-700 border-teal-200"
+                  : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"
+              )}
+              title="Toggle Socratic Mode — AI asks questions instead of giving answers"
+            >
+              <Brain className="w-3 h-3" />
+              {socraticMode ? 'Socratic · ON' : 'Socratic'}
+            </button>
             <Sparkles className="w-5 h-5 text-[#5A5A40] opacity-50" />
           </div>
         </div>
