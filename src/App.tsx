@@ -269,9 +269,12 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: base64Content, mimeType: file.type }),
         });
-        
-        if (!response.ok) throw new Error('Failed to upload file.');
-        
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Upload failed (${response.status})`);
+        }
+
         const data = await response.json();
         console.log('File uploaded, fileId:', data.fileId);
         setFileId(data.fileId);
@@ -284,7 +287,10 @@ export default function App() {
           body: JSON.stringify({ fileId: data.fileId }),
         });
 
-        if (!planResponse.ok) throw new Error('Failed to extract study plan.');
+        if (!planResponse.ok) {
+          const errData = await planResponse.json().catch(() => ({}));
+          throw new Error(errData.error || `Plan extraction failed (${planResponse.status})`);
+        }
 
         const planData = await planResponse.json();
         const newPlan: StudyPlan = {
@@ -315,9 +321,9 @@ export default function App() {
         }));
 
         setProcessing(false);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Upload error:', err);
-        setError('Failed to upload file and extract plan.');
+        setError(err?.message || 'Failed to upload file and extract plan.');
         setProcessing(false);
       }
     };

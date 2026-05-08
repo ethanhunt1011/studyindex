@@ -9,7 +9,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+// 50 MB global limit — upload route sends base64-encoded files in JSON body
+app.use(express.json({ limit: '50mb' }));
 
 // Simple in-memory rate limiter
 const rateLimit = new Map<string, { count: number; resetTime: number }>();
@@ -46,7 +47,26 @@ const getApiKey = () => {
   return rawKey?.replace(/['"]/g, '').trim();
 };
 
-app.post("/api/upload", express.json({ limit: '50mb' }), (req, res) => {
+// Helper: convert stored file (base64 data-URI) into Gemini content parts
+function fileToContentParts(content: string, mimeType: string): any[] {
+  if (mimeType && (mimeType.startsWith('image/') || mimeType === 'application/pdf')) {
+    // Images and PDFs: send as inlineData (Gemini supports both natively)
+    const base64Data = content.includes(',') ? content.split(',')[1] : content;
+    return [{ inlineData: { data: base64Data, mimeType } }];
+  }
+  // Text / unknown: decode the base64 data-URI back to a plain string
+  let textContent = content;
+  if (content.includes(',')) {
+    try {
+      textContent = Buffer.from(content.split(',')[1], 'base64').toString('utf-8');
+    } catch {
+      textContent = content; // fallback: send raw
+    }
+  }
+  return [{ text: textContent }];
+}
+
+app.post("/api/upload", (req, res) => {
   const { content, mimeType } = req.body;
   console.log('Upload received, mimeType:', mimeType, 'content length:', content?.length);
   const fileId = Date.now().toString();
@@ -74,13 +94,11 @@ app.post("/api/summarize", rateLimiter, async (req, res) => {
     }
     console.log('API key present:', !!apiKey, 'Starts with:', apiKey.substring(0, 5));
     const ai = new GoogleGenAI({ apiKey });
-    const contents: any[] = [];
-    if (mimeType && mimeType.startsWith('image/')) {
-      contents.push({ inlineData: { data: content.split(',')[1], mimeType } });
-      contents.push({ text: "Summarize this image. Use a neat, clean, point-based format with bullet points instead of paragraphs." });
-    } else {
-      contents.push({ text: `Summarize the following text. Use a neat, clean, point-based format with bullet points instead of paragraphs:\n\n${content}` });
-    }
+    const fileParts = fileToContentParts(content, mimeType);
+    const instruction = mimeType && mimeType.startsWith('image/')
+      ? "Summarize this image. Use a neat, clean, point-based format with bullet points instead of paragraphs."
+      : "Summarize the above content. Use a neat, clean, point-based format with bullet points instead of paragraphs.";
+    const contents: any[] = [...fileParts, { text: instruction }];
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -146,15 +164,10 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
       return res.status(500).json({ error: 'Server configuration error.' });
     }
     const ai = new GoogleGenAI({ apiKey });
-    const contents: any[] = [];
-    
-    if (mimeType && mimeType.startsWith('image/')) {
-      contents.push({ inlineData: { data: content.split(',')[1], mimeType } });
-    } else {
-      contents.push({ text: `Analyze the following text:\n\n${content}` });
-    }
-    
-    contents.push({ text: `Extract the hierarchy: Units -> Chapters -> Topics. 
+    const fileParts = fileToContentParts(content, mimeType);
+    const contents: any[] = [
+      ...fileParts,
+      { text: `Extract the hierarchy: Units -> Chapters -> Topics. 
     For each Topic:
     1. Determine difficulty (Easy, Medium, Complex).
     2. Rate importance (High, Medium, Low).
@@ -163,7 +176,8 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
     5. Determine the optimal study sequence (order).
     6. Estimate time to consume (e.g., "30 mins").
     7. Suggest a revision date/schedule (e.g., "Revise in 3 days").
-    Return as structured JSON.` });
+    Return as structured JSON.` }
+    ];
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -288,11 +302,7 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
     
     if (fileData) {
       const { content, mimeType } = JSON.parse(fileData);
-      if (mimeType && mimeType.startsWith('image/')) {
-        contents.push({ inlineData: { data: content.split(',')[1], mimeType } });
-      } else {
-        contents.push({ text: `Context: ${content}\n\n` });
-      }
+      contents.push(...fileToContentParts(content, mimeType));
     }
     contents.push({ text: `Question: ${input}` });
       
