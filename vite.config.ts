@@ -2,12 +2,12 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
-import {defineConfig, loadEnv} from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
-export default defineConfig(({mode}) => {
+export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
-  
-  // Try to get Firebase API key as fallback
+
+  // Read Firebase API key from local config if present
   let firebaseApiKey = '';
   try {
     const firebaseConfigPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
@@ -16,12 +16,20 @@ export default defineConfig(({mode}) => {
       firebaseApiKey = firebaseConfig.apiKey || '';
     }
   } catch (e) {
-    // Ignore
+    // ignore
   }
 
-  const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY || firebaseApiKey || 'AIzaSyA2gNBO_QZjxnh0qVayj4pYa1QzjBgQOK8';
-  const buildId = 'force_refresh_' + Date.now();
-  
+  const apiKey =
+    env.VITE_GEMINI_API_KEY ||
+    env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    firebaseApiKey ||
+    '';
+
+  const buildId = 'build_' + Date.now();
+
   return {
     base: './',
     plugins: [react(), tailwindcss()],
@@ -35,10 +43,13 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    // Only scan src/ and index.html — keeps Vite away from the android/
+    // build artefacts that reference packages not in node_modules.
+    optimizeDeps: {
+      entries: ['index.html', 'src/**/*.{ts,tsx}'],
+    },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: false,
+      hmr: true,
     },
   };
 });
