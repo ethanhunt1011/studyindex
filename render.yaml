@@ -2,7 +2,7 @@ services:
   - type: web
     name: studyindex
     env: node
-    region: singapore   # closest to India — change to "ohio" for US
+    region: singapore
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -10,5 +10,21 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # ── Gemini AI ─────────────────────────────────────────────────────────
       - key: VITE_GEMINI_API_KEY
-        sync: false        # you'll paste your Gemini API key in the Render dashboard
+        sync: false          # paste your key from aistudio.google.com/apikey
+      # ── Firebase (paste values from your Firebase project settings) ───────
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      - key: VITE_FIREBASE_FIRESTORE_ID
+        sync: false
