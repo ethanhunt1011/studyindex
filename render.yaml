@@ -2,7 +2,7 @@ services:
   - type: web
     name: studyindex
     env: node
-    region: singapore
+    region: oregon
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
