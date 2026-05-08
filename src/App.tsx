@@ -49,14 +49,19 @@ import {
   getSignInResult
 } from './lib/firebase';
 import { ConfirmationResult } from 'firebase/auth';
-import { 
-  saveLocalPlans, 
-  getLocalPlans, 
-  saveLocalProgress, 
-  getLocalProgress, 
-  saveLocalProfile, 
+import {
+  saveLocalPlans,
+  getLocalPlans,
+  saveLocalProgress,
+  getLocalProgress,
+  saveLocalProfile,
   getLocalProfile,
-  clearLocalData
+  clearLocalData,
+  saveStudySessions,
+  getStudySessions,
+  saveScheduledSessions,
+  getScheduledSessions,
+  StudySession,
 } from './lib/storage';
 import { extractTopicsFromImage, generateFlashcards, Topic, Unit, Chapter, Flashcard } from './services/gemini';
 import { cn } from './lib/utils';
@@ -144,6 +149,8 @@ export default function App() {
   const [isScheduling, setIsScheduling] = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [tempName, setTempName] = useState('');
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatTime = (seconds: number) => {
@@ -158,8 +165,25 @@ export default function App() {
       interval = setInterval(() => {
         setTimerSeconds((prev) => prev - 1);
       }, 1000);
-    } else if (timerSeconds === 0) {
+    } else if (timerSeconds === 0 && isTimerRunning) {
       setIsTimerRunning(false);
+      setShowCelebration(true);
+      // Track this completed focus session
+      const durationMins = profile?.focusTime || 25;
+      const newSession: StudySession = {
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0],
+        durationMinutes: durationMins,
+        topicsCompleted: 0,
+      };
+      setStudySessions(prev => {
+        const updated = [...prev, newSession];
+        saveStudySessions(updated);
+        return updated;
+      });
+      completeSession();
+      // Reset timer for next session
+      setTimerSeconds((profile?.focusTime || 25) * 60);
     }
     return () => clearInterval(interval);
   }, [isTimerRunning, timerSeconds]);
@@ -212,10 +236,16 @@ export default function App() {
 
   useEffect(() => {
     const loadData = async () => {
-      const localPlans = await getLocalPlans();
-      const localProgress = await getLocalProgress();
+      const [localPlans, localProgress, localSessions, localScheduled] = await Promise.all([
+        getLocalPlans(),
+        getLocalProgress(),
+        getStudySessions(),
+        getScheduledSessions(),
+      ]);
       if (localPlans) setPlans(localPlans);
       if (localProgress) setProgress(localProgress);
+      if (localSessions) setStudySessions(localSessions);
+      if (localScheduled) setScheduledTopics(localScheduled);
       setLoading(false);
     };
     loadData();
@@ -326,15 +356,107 @@ export default function App() {
       console.error('Logout failed:', error);
     }
   };
-  const suggestSchedule = () => {
-    // Placeholder for suggest schedule logic
-    console.log('Suggest schedule triggered');
+  const handleAddSchedule = (session: { topicTitle: string; date: string; time: string }) => {
+    const newTopic = {
+      id: Date.now().toString(),
+      topicTitle: session.topicTitle,
+      date: session.date,
+      time: session.time,
+      scheduledAt: new Date(`${session.date}T${session.time}`).toISOString(),
+    };
+    setScheduledTopics(prev => {
+      const updated = [...prev, newTopic].sort(
+        (a: any, b: any) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+      );
+      saveScheduledSessions(updated);
+      return updated;
+    });
+    setShowScheduleModal(null);
   };
+
+  const suggestSchedule = async () => {
+    if (!fileId) {
+      setShowScheduleModal({ topic: { title: 'Study Session' }, isSuggest: true });
+      return;
+    }
+    try {
+      const deadlines = `Today is ${new Date().toLocaleDateString()}. Create a 7-day schedule.`;
+      const response = await fetch('/api/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId, deadlines }),
+      });
+      if (!response.ok) return;
+      const suggestions: Array<{ date: string; topic: string; durationMinutes: number }> = await response.json();
+      const newTopics = suggestions.slice(0, 5).map((s, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() + i + 1);
+        const dateStr = d.toISOString().split('T')[0];
+        return {
+          id: `${Date.now()}-${i}`,
+          topicTitle: s.topic,
+          date: dateStr,
+          time: '10:00',
+          scheduledAt: new Date(`${dateStr}T10:00`).toISOString(),
+        };
+      });
+      setScheduledTopics(prev => {
+        const updated = [...(prev as any[]), ...newTopics].sort(
+          (a: any, b: any) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+        );
+        saveScheduledSessions(updated);
+        return updated;
+      });
+    } catch (err) {
+      console.error('suggestSchedule error:', err);
+    }
+  };
+
   const handleDeleteSchedule = (id: string) => {
-    // Placeholder for delete schedule logic
-    console.log('Delete schedule triggered', id);
+    setScheduledTopics(prev => {
+      const updated = (prev as any[]).filter((t: any) => t.id !== id);
+      saveScheduledSessions(updated);
+      return updated;
+    });
   };
-  const getGoogleCalendarUrl = (topic: any) => '';
+
+  const getGoogleCalendarUrl = (topic: any) => {
+    try {
+      const start = topic.scheduledAt
+        ? new Date(topic.scheduledAt)
+        : new Date(`${topic.date}T${topic.time || '10:00'}`);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      const fmt = (d: Date) => d.toISOString().replace(/[-:]|\.\d{3}/g, '');
+      const title = encodeURIComponent(topic.topicTitle || topic.title || 'Study Session');
+      const details = encodeURIComponent('Scheduled via StudyIndex');
+      return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const handleGenerateFlashcards = async (topic: any) => {
+    setCurrentFlashcards([]);
+    setFlashcardIndex(0);
+    setShowAnswer(false);
+    setShowFlashcards(true);
+    try {
+      const response = await fetch('/api/flashcards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topicTitle: topic.title,
+          context: topic.dailyExercise || '',
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to generate flashcards');
+      const cards = await response.json();
+      setCurrentFlashcards(cards);
+    } catch (err) {
+      console.error('Flashcard error:', err);
+      setShowFlashcards(false);
+    }
+  };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!profile) return;
@@ -455,9 +577,14 @@ export default function App() {
               showScheduleModal={showScheduleModal}
               isGuest={isGuest}
               completeSession={completeSession}
+              handleAddSchedule={handleAddSchedule}
+              handleGenerateFlashcards={handleGenerateFlashcards}
+              showCelebration={showCelebration}
+              setShowCelebration={setShowCelebration}
+              studySessions={studySessions}
             />
           } />
-          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} />} />
           <Route path="/rooms" element={<StudyRooms />} />
           <Route path="/buddy" element={<StudyBuddy fileId={fileId} />} />
           <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} />} />

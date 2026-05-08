@@ -1,70 +1,274 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { saveLocalChats, getLocalChats } from '../lib/storage';
-import { Plus, MessageSquare, Trash2 } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2 } from 'lucide-react';
 export { Dashboard } from './Dashboard';
 export { Login } from './Login';
-export const Analytics = () => {
-  const hasData = false; // Placeholder for actual data check
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+interface AnalyticsProps {
+  studySessions?: any[];
+  plans?: any[];
+  progress?: Record<string, any>;
+  profile?: any;
+}
+
+export const Analytics = ({ studySessions = [], plans = [], progress = {}, profile }: AnalyticsProps) => {
+  // ── Compute stats ────────────────────────────────────────────────────────
+  const totalMinutes = studySessions.reduce((s: number, x: any) => s + (x.durationMinutes || 0), 0);
+  const totalHours = (totalMinutes / 60).toFixed(1);
+
+  const allTopics = (plans || []).flatMap((plan: any) =>
+    (plan.units || []).flatMap((u: any) =>
+      (u.chapters || []).flatMap((c: any) => c.topics || [])
+    )
+  );
+  const totalTopics = allTopics.length;
+  const completedTopics = Object.values(progress).reduce(
+    (sum: number, p: any) => sum + (p.completedTopicIds?.length || 0), 0
+  );
+
+  // ── Last 7 days bar chart ────────────────────────────────────────────────
+  const days: { label: string; date: string; minutes: number }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    const dayMinutes = studySessions
+      .filter((s: any) => s.date === dateStr)
+      .reduce((sum: number, s: any) => sum + (s.durationMinutes || 0), 0);
+    days.push({
+      label: d.toLocaleDateString(undefined, { weekday: 'short' }),
+      date: dateStr,
+      minutes: dayMinutes,
+    });
+  }
+  const maxMins = Math.max(...days.map(d => d.minutes), 1);
+
+  // ── Motivational quote ───────────────────────────────────────────────────
+  const pct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
+  const quotes = [
+    { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+    { text: "Consistency is the key to mastery. Keep going!", author: "StudyIndex" },
+    { text: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
+    { text: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" },
+    { text: "Learning is not attained by chance, it must be sought for with ardor.", author: "Abigail Adams" },
+  ];
+  const quote = quotes[completedTopics % quotes.length];
+
+  const hasData = studySessions.length > 0 || plans.length > 0;
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-serif font-bold mb-6">Analytics</h1>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-serif font-bold text-[#1A1A1A]">Analytics</h1>
+        <p className="text-sm text-[#5A5A40]/60 mt-1">Track your study progress over time</p>
+      </div>
+
       {!hasData ? (
-        <div className="text-center py-12 bg-gray-50 rounded-[32px] border border-gray-100">
-          <p className="text-gray-500 italic">No data generated as of now.</p>
+        <div className="text-center py-16 bg-white rounded-[32px] border border-gray-100 shadow-sm">
+          <BarChart3 className="w-12 h-12 mx-auto mb-4 text-[#5A5A40]/20" />
+          <p className="text-[#5A5A40]/60 font-medium">No data yet.</p>
+          <p className="text-sm text-[#5A5A40]/40 mt-1">Complete a focus session or upload a study plan to see your stats here.</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-100">
-            <h2 className="text-lg font-bold mb-4">Time Spent</h2>
-            {/* Placeholder for graph */}
-            <div className="h-40 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400">
-              Graph Placeholder
+        <>
+          {/* ── Stat cards ─────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { label: 'Focus Hours', value: totalHours, sub: 'total', icon: <Clock className="w-5 h-5" />, color: 'bg-blue-50 text-blue-700' },
+              { label: 'Topics Done', value: completedTopics, sub: `of ${totalTopics}`, icon: <CheckCircle2 className="w-5 h-5" />, color: 'bg-green-50 text-green-700' },
+              { label: 'Streak', value: profile?.streakCount || 0, sub: 'days', icon: <Flame className="w-5 h-5" />, color: 'bg-orange-50 text-orange-700' },
+              { label: 'Completion', value: `${pct}%`, sub: 'overall', icon: <Target className="w-5 h-5" />, color: 'bg-purple-50 text-purple-700' },
+            ].map((stat) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-5"
+              >
+                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center mb-3", stat.color)}>
+                  {stat.icon}
+                </div>
+                <div className="text-2xl font-serif font-bold text-[#1A1A1A]">{stat.value}</div>
+                <div className="text-xs text-[#5A5A40]/60 font-medium mt-0.5">{stat.label} · {stat.sub}</div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* ── Weekly bar chart ─────────────────────────────────────────────── */}
+          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+            <h2 className="font-bold text-[#1A1A1A] mb-5">Focus Minutes — Last 7 Days</h2>
+            <div className="flex items-end gap-2 h-32">
+              {days.map((day) => {
+                const heightPct = (day.minutes / maxMins) * 100;
+                const isToday = day.date === new Date().toISOString().split('T')[0];
+                return (
+                  <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="text-[10px] font-bold text-[#5A5A40]/60 mb-1">
+                      {day.minutes > 0 ? `${day.minutes}m` : ''}
+                    </div>
+                    <div className="w-full flex items-end" style={{ height: '80px' }}>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${Math.max(heightPct, day.minutes > 0 ? 6 : 0)}%` }}
+                        transition={{ duration: 0.6, delay: 0.05, ease: 'easeOut' }}
+                        className={cn(
+                          "w-full rounded-t-lg min-h-0",
+                          isToday ? "bg-[#5A5A40]" : day.minutes > 0 ? "bg-[#5A5A40]/40" : "bg-gray-100"
+                        )}
+                        style={{ minHeight: day.minutes > 0 ? '4px' : '2px' }}
+                      />
+                    </div>
+                    <span className={cn("text-[10px] font-semibold", isToday ? "text-[#5A5A40]" : "text-[#5A5A40]/40")}>
+                      {day.label}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
-          <div className="bg-orange-50 p-6 rounded-[32px] border border-orange-100">
-            <h2 className="text-lg font-bold text-orange-900 mb-2">Motivation</h2>
-            <p className="text-orange-700 italic">"Consistency is the key to mastery. Keep going!"</p>
+
+          {/* ── Plan progress ─────────────────────────────────────────────────── */}
+          {plans.length > 0 && (
+            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+              <h2 className="font-bold text-[#1A1A1A] mb-5">Plan Progress</h2>
+              <div className="space-y-4">
+                {plans.map((plan: any) => {
+                  const planTopics = (plan.units || []).flatMap((u: any) => (u.chapters || []).flatMap((c: any) => c.topics || []));
+                  const done = progress[plan.id]?.completedTopicIds?.length || 0;
+                  const total = planTopics.length;
+                  const p = total > 0 ? Math.round((done / total) * 100) : 0;
+                  return (
+                    <div key={plan.id}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-semibold text-[#1A1A1A] truncate flex-1 mr-3">{plan.bookTitle}</span>
+                        <span className="text-xs font-bold text-[#5A5A40]/60 shrink-0">{done}/{total} · {p}%</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${p}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                          className="h-full rounded-full bg-gradient-to-r from-[#5A5A40] to-[#8A8A60]"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Motivational quote ────────────────────────────────────────────── */}
+          <div className="bg-[#5A5A40] rounded-[32px] p-6 text-white">
+            <p className="font-serif text-lg italic leading-relaxed">"{quote.text}"</p>
+            <p className="text-sm text-white/60 mt-3 font-medium">— {quote.author}</p>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
 };
 
+// ─── StudyRooms ───────────────────────────────────────────────────────────────
 export const StudyRooms = () => {
-  const [inviteEmail, setInviteEmail] = React.useState('');
+  const [copied, setCopied] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState('');
 
-  const handleInviteByEmail = () => {
-    console.log('Inviting by email:', inviteEmail);
-    setInviteEmail('');
+  const shareLink = `${window.location.origin}?room=study-${Math.random().toString(36).slice(2, 8)}`;
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(shareLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
+  const features = [
+    { icon: '🎙️', title: 'Voice Rooms', desc: 'Study together with live audio' },
+    { icon: '📋', title: 'Shared Plans', desc: 'Sync study plans with your group' },
+    { icon: '🏆', title: 'Group Streaks', desc: 'Keep each other accountable' },
+    { icon: '💬', title: 'Chat', desc: 'Real-time study chat & notes' },
+  ];
+
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-serif font-bold mb-6">Study Rooms</h1>
-      <div className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 mb-6">
-        <h2 className="text-lg font-bold mb-4">Invite a Friend</h2>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-serif font-bold text-[#1A1A1A]">Study Rooms</h1>
+        <p className="text-sm text-[#5A5A40]/60 mt-1">Collaborative study with friends</p>
+      </div>
+
+      {/* Coming soon hero */}
+      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-8 text-center">
+        <div className="w-16 h-16 bg-[#5A5A40]/10 rounded-[20px] flex items-center justify-center mx-auto mb-4">
+          <Users className="w-8 h-8 text-[#5A5A40]" />
+        </div>
+        <h2 className="text-xl font-serif font-bold text-[#1A1A1A] mb-2">Coming Soon</h2>
+        <p className="text-sm text-[#5A5A40]/70 leading-relaxed max-w-xs mx-auto">
+          Study rooms with voice, shared plans, and live accountability partners are in development.
+        </p>
+      </div>
+
+      {/* Preview features */}
+      <div className="grid grid-cols-2 gap-4">
+        {features.map((f) => (
+          <div key={f.title} className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-5">
+            <div className="text-2xl mb-2">{f.icon}</div>
+            <h3 className="font-bold text-sm text-[#1A1A1A]">{f.title}</h3>
+            <p className="text-xs text-[#5A5A40]/60 mt-1">{f.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Share study plan */}
+      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Share2 className="w-5 h-5 text-[#5A5A40]" />
+          <h2 className="font-bold text-[#1A1A1A]">Share Your Progress</h2>
+        </div>
+        <p className="text-sm text-[#5A5A40]/60 mb-4">
+          Copy a link to share your study room invite with a friend. Room features will be live soon.
+        </p>
         <div className="flex gap-2">
-          <input 
-            type="email" 
-            placeholder="Enter email address" 
-            className="flex-1 p-3 rounded-xl border border-gray-200"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-          />
-          <button 
-            onClick={handleInviteByEmail}
-            className="bg-[#5A5A40] text-white px-6 py-3 rounded-xl font-bold"
+          <div className="flex-1 bg-[#F5F5F0] rounded-xl px-4 py-3 text-sm text-[#5A5A40]/60 font-mono truncate border border-[#1A1A1A]/5">
+            {shareLink}
+          </div>
+          <button
+            onClick={handleCopyLink}
+            className={cn(
+              "px-4 py-3 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all active:scale-[0.98]",
+              copied ? "bg-green-500 text-white" : "bg-[#5A5A40] text-white hover:bg-[#4A4A30]"
+            )}
           >
-            Invite
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {copied ? 'Copied!' : 'Copy'}
           </button>
         </div>
       </div>
-      <div className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-100">
-        <h2 className="text-lg font-bold mb-4">Active Rooms</h2>
-        <p className="text-gray-500 italic">No active rooms. Start one by inviting a friend!</p>
+
+      {/* Join room */}
+      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+        <h2 className="font-bold text-[#1A1A1A] mb-4">Join a Room</h2>
+        <p className="text-sm text-[#5A5A40]/60 mb-4">Got an invite code? Enter it below.</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Enter invite code"
+            value={joinCode}
+            onChange={e => { setJoinCode(e.target.value); setJoinError(''); }}
+            className="flex-1 bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
+          />
+          <button
+            onClick={() => setJoinError('Study Rooms are coming soon. Stay tuned!')}
+            className="px-5 py-3 rounded-xl bg-[#5A5A40] text-white font-semibold text-sm hover:bg-[#4A4A30] transition-all active:scale-[0.98]"
+          >
+            Join
+          </button>
+        </div>
+        {joinError && <p className="text-sm text-[#5A5A40]/60 mt-2 italic">{joinError}</p>}
       </div>
     </div>
   );

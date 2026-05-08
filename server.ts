@@ -225,6 +225,50 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
   }
 });
 
+app.post("/api/flashcards", rateLimiter, async (req, res) => {
+  const { topicTitle, context } = req.body;
+  if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
+
+  const cacheKey = `fc:${topicTitle}`;
+  if (chatCache.has(cacheKey)) return res.json(JSON.parse(chatCache.get(cacheKey)!));
+
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+
+    const ai = new GoogleGenAI({ apiKey });
+    const prompt = context
+      ? `Generate 5 concise flashcards for the topic "${topicTitle}". Extra context: ${context}.`
+      : `Generate 5 concise flashcards for the topic "${topicTitle}".`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              answer:   { type: Type.STRING }
+            },
+            required: ["question", "answer"]
+          }
+        }
+      }
+    });
+
+    const text = response.text || "[]";
+    chatCache.set(cacheKey, text);
+    res.json(JSON.parse(text));
+  } catch (error) {
+    console.error('Error in /api/flashcards:', error);
+    res.status(500).json({ error: 'Error generating flashcards.' });
+  }
+});
+
 app.post("/api/chat", rateLimiter, async (req, res) => {
   const { input, fileId } = req.body;
   const fileData = fileId ? fileContents.get(fileId) : null;
