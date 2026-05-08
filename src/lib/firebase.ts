@@ -1,17 +1,33 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult
 } from 'firebase/auth';
-import { getFirestore, initializeFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocFromServer } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  serverTimestamp,
+  getDocFromServer
+} from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-let app;
+let app: any;
 try {
   app = initializeApp(firebaseConfig);
   console.log('Firebase initialized successfully');
@@ -20,16 +36,42 @@ try {
 }
 
 export const auth = app ? getAuth(app) : null;
-export const db = app ? initializeFirestore(app, {
-  experimentalForceLongPolling: true
-}, firebaseConfig.firestoreDatabaseId) : null;
+export const db = app
+  ? initializeFirestore(app, { experimentalForceLongPolling: true }, firebaseConfig.firestoreDatabaseId)
+  : null;
 export const googleProvider = new GoogleAuthProvider();
 
-export const setupRecaptcha = (containerId: string) => {
+// ─── Google Sign-In ───────────────────────────────────────────────────────────
+// On Android (Capacitor native), signInWithPopup never works inside a WebView.
+// We use signInWithRedirect instead; the result is caught in onAuthStateChanged
+// via getSignInResult() called once at app start.
+export const signIn = async () => {
+  if (!auth) return Promise.reject('Auth not initialized');
+  if (Capacitor.isNativePlatform()) {
+    return signInWithRedirect(auth, googleProvider);
+  }
+  return signInWithPopup(auth, googleProvider);
+};
+
+// Call this once at app start to pick up any pending redirect result (Android)
+export const getSignInResult = () => {
+  if (!auth) return Promise.resolve(null);
+  return getRedirectResult(auth);
+};
+
+// ─── Phone Sign-In ───────────────────────────────────────────────────────────
+// We keep a single RecaptchaVerifier instance to avoid "already rendered" errors.
+let recaptchaVerifier: RecaptchaVerifier | null = null;
+
+export const setupRecaptcha = (containerId: string): RecaptchaVerifier | null => {
   if (!auth) return null;
-  return new RecaptchaVerifier(auth, containerId, {
-    'size': 'invisible'
-  });
+  // If a verifier already exists, clear and recreate to avoid stale state
+  if (recaptchaVerifier) {
+    try { recaptchaVerifier.clear(); } catch (_) { /* ignore */ }
+    recaptchaVerifier = null;
+  }
+  recaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' });
+  return recaptchaVerifier;
 };
 
 export const signInWithPhone = (phoneNumber: string, appVerifier: any) => {
@@ -37,17 +79,12 @@ export const signInWithPhone = (phoneNumber: string, appVerifier: any) => {
   return signInWithPhoneNumber(auth, phoneNumber, appVerifier);
 };
 
-export const signIn = () => {
-  if (!auth) return Promise.reject('Auth not initialized');
-  return signInWithPopup(auth, googleProvider);
-};
-
 export const logOut = () => {
   if (!auth) return Promise.reject('Auth not initialized');
   return signOut(auth);
 };
 
-// Error handling helper
+// ─── Error helper ─────────────────────────────────────────────────────────────
 export const OperationType = {
   CREATE: 'create',
   UPDATE: 'update',
@@ -75,10 +112,14 @@ export interface FirestoreErrorInfo {
       email: string | null;
       photoUrl: string | null;
     }[];
-  }
+  };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -87,29 +128,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       emailVerified: auth?.currentUser?.emailVerified,
       isAnonymous: auth?.currentUser?.isAnonymous,
       tenantId: auth?.currentUser?.tenantId,
-      providerInfo: auth?.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
+      providerInfo:
+        auth?.currentUser?.providerData.map(p => ({
+          providerId: p.providerId,
+          displayName: p.displayName,
+          email: p.email,
+          photoUrl: p.photoURL,
+        })) || [],
     },
     operationType,
-    path
-  }
+    path,
+  };
   const errorString = JSON.stringify(errInfo);
   console.error('Firestore Error: ', errorString);
   throw new Error(errorString);
 }
-
-async function testConnection() {
-  if (!db) return;
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. ");
-    }
-  }
-}
-// testConnection(); // Removed top-level call to avoid early initialization errors

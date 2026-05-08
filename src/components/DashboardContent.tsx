@@ -467,21 +467,44 @@ export const DashboardContent = ({
                     "p-6 md:p-8 rounded-[40px] shadow-sm border",
                     isDark ? "bg-[#1A1A1A] border-white/10" : "bg-white border-[#1A1A1A]/5"
                   )}>
-                    <div className="flex items-center justify-between mb-8">
-                      <div>
-                        <h4 className={cn("text-2xl font-serif font-bold", isDark ? "text-white" : "text-[#1A1A1A]")}>{plan.bookTitle}</h4>
-                        <p className={cn("text-sm mt-1", isDark ? "text-gray-400" : "text-[#5A5A40]")}>
-                          Created on {new Date(plan.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => deletePlan(plan.id)}
-                        className={cn("p-3 rounded-full transition-colors", isDark ? "hover:bg-red-900/20 text-red-400" : "hover:bg-red-50 text-red-500")}
-                        title="Delete Plan"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
+                    {(() => {
+                      const totalTopics = (plan.units || []).flatMap((u: any) => (u.chapters || []).flatMap((c: any) => c.topics || [])).length;
+                      const completedCount = planProgress.length;
+                      const pct = totalTopics > 0 ? Math.round((completedCount / totalTopics) * 100) : 0;
+                      return (
+                        <div className="mb-8">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <h4 className={cn("text-2xl font-serif font-bold", isDark ? "text-white" : "text-[#1A1A1A]")}>{plan.bookTitle}</h4>
+                              <p className={cn("text-sm mt-1", isDark ? "text-gray-400" : "text-[#5A5A40]")}>
+                                Created {new Date(plan.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => deletePlan(plan.id)}
+                              className={cn("p-3 rounded-full transition-colors shrink-0", isDark ? "hover:bg-red-900/20 text-red-400" : "hover:bg-red-50 text-red-500")}
+                              title="Delete Plan"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="flex items-center gap-3">
+                            <div className={cn("flex-1 h-2 rounded-full overflow-hidden", isDark ? "bg-white/10" : "bg-gray-100")}>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${pct}%` }}
+                                transition={{ duration: 0.8, ease: 'easeOut' }}
+                                className="h-full rounded-full bg-gradient-to-r from-[#5A5A40] to-[#8A8A60]"
+                              />
+                            </div>
+                            <span className={cn("text-xs font-bold tabular-nums shrink-0", isDark ? "text-gray-400" : "text-[#5A5A40]")}>
+                              {completedCount}/{totalTopics} · {pct}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="space-y-6">
                       {plan.units?.map((unit: any, uIdx: number) => (

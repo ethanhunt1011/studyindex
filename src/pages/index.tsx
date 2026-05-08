@@ -3,6 +3,7 @@ import { cn } from '../lib/utils';
 import { saveLocalChats, getLocalChats } from '../lib/storage';
 import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 export { Dashboard } from './Dashboard';
+export { Login } from './Login';
 export const Analytics = () => {
   const hasData = false; // Placeholder for actual data check
 

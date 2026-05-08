@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   BookOpen, 
   Camera, 
@@ -37,15 +37,16 @@ import {
   addDoc,
   Timestamp
 } from 'firebase/firestore';
-import { 
-  auth, 
-  db, 
-  signIn, 
-  logOut, 
-  handleFirestoreError, 
+import {
+  auth,
+  db,
+  signIn,
+  logOut,
+  handleFirestoreError,
   OperationType,
   setupRecaptcha,
-  signInWithPhone
+  signInWithPhone,
+  getSignInResult
 } from './lib/firebase';
 import { ConfirmationResult } from 'firebase/auth';
 import { 
@@ -114,9 +115,7 @@ interface ScheduledTopic {
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { Dashboard, Analytics, StudyRooms, StudyBuddy, Settings } from './pages';
-
-// ... (keep existing imports and logic)
+import { Dashboard, Analytics, StudyRooms, StudyBuddy, Settings, Login } from './pages';
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -125,6 +124,7 @@ export default function App() {
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [progress, setProgress] = useState<Record<string, Progress>>({});
   const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
   const [isDeepFocus, setIsDeepFocus] = useState(false);
   const [theme, setTheme] = useState<'day' | 'dark'>('day');
   const [timerSeconds, setTimerSeconds] = useState(1500);
@@ -163,6 +163,45 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [isTimerRunning, timerSeconds]);
+
+  // ── Auth state listener ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!auth) { setAuthLoading(false); return; }
+
+    // Catch any pending Android redirect result first
+    getSignInResult().catch(console.error);
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser && db) {
+        try {
+          const profileRef = doc(db, 'users', firebaseUser.uid);
+          const snap = await getDoc(profileRef);
+          if (snap.exists()) {
+            setProfile(snap.data() as UserProfile);
+          } else {
+            const newProfile: UserProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName || '',
+              dailyLimit: 2,
+              reminderTime: '09:00',
+              focusTime: 25,
+              topicsForDay: 2,
+              streakCount: 0,
+              badges: [],
+            };
+            await setDoc(profileRef, newProfile);
+            setProfile(newProfile);
+          }
+        } catch (e) {
+          console.error('Profile load error:', e);
+        }
+      }
+      setAuthLoading(false);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -351,6 +390,25 @@ export default function App() {
       console.error('Error updating profile:', error);
     }
   };
+
+  // Show a full-screen spinner while auth + local data both resolve
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F0] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 bg-[#5A5A40] rounded-[14px] flex items-center justify-center">
+            <BookOpen className="w-6 h-6 text-white" />
+          </div>
+          <Loader2 className="w-6 h-6 animate-spin text-[#5A5A40]" />
+        </div>
+      </div>
+    );
+  }
+
+  // Show login screen when not authenticated and not in guest mode
+  if (!user && !isGuest) {
+    return <Login onGuestMode={() => setIsGuest(true)} />;
+  }
 
   return (
     <BrowserRouter>
