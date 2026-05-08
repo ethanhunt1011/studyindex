@@ -83,7 +83,7 @@ app.post("/api/summarize", rateLimiter, async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts: contents },
     });
     console.log('Gemini response received');
@@ -109,7 +109,7 @@ app.post("/api/schedule", rateLimiter, async (req, res) => {
     }
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: `Based on this study material: ${content}\n\nAnd these deadlines: ${deadlines}\n\nGenerate a study schedule. Return as structured JSON with fields: date, topic, durationMinutes.`,
       config: {
         responseMimeType: "application/json",
@@ -166,7 +166,7 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
     Return as structured JSON.` });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts: contents },
       config: {
         responseMimeType: "application/json",
@@ -242,7 +242,7 @@ app.post("/api/flashcards", rateLimiter, async (req, res) => {
       : `Generate 5 concise flashcards for the topic "${topicTitle}".`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -297,7 +297,7 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
     contents.push({ text: `Question: ${input}` });
       
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts: contents },
       config: {
         systemInstruction: "You are a helpful study buddy. Answer questions based on the provided context if available, otherwise answer generally."
