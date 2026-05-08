@@ -63,7 +63,7 @@ import {
   getScheduledSessions,
   StudySession,
 } from './lib/storage';
-import { extractTopicsFromImage, generateFlashcards, Topic, Unit, Chapter, Flashcard } from './services/gemini';
+import type { Topic, Unit, Chapter, Flashcard } from './services/gemini';
 import { cn } from './lib/utils';
 import { Phone, Smartphone, ShieldAlert, Timer, Play, Pause, RotateCcw } from 'lucide-react';
 
