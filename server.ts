@@ -1,3 +1,4 @@
+import 'dotenv/config';   // load .env in local dev (no-op when env vars already set)
 import express from "express";
 import { GoogleGenAI, Type } from "@google/genai";
 import path from "path";
@@ -46,6 +47,16 @@ const getApiKey = () => {
   const rawKey = process.env.VITE_GEMINI_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY;
   return rawKey?.replace(/['"]/g, '').trim();
 };
+
+// Health / diagnostic endpoint — never exposes the key value
+app.get("/api/health", (req, res) => {
+  const apiKey = getApiKey();
+  res.json({
+    status: 'ok',
+    geminiKey: apiKey ? `configured (${apiKey.length} chars)` : 'MISSING — set VITE_GEMINI_API_KEY on Render',
+    nodeEnv: process.env.NODE_ENV || 'not set',
+  });
+});
 
 // Helper: convert stored file (base64 data-URI) into Gemini content parts
 function fileToContentParts(content: string, mimeType: string): any[] {
