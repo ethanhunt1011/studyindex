@@ -66,13 +66,15 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
         <p className="text-sm text-[#5A5A40]/60 mt-1">Track your study progress over time</p>
       </div>
 
-      {!hasData ? (
+      {!hasData && (
         <div className="text-center py-16 bg-white rounded-[32px] border border-gray-100 shadow-sm">
           <BarChart3 className="w-12 h-12 mx-auto mb-4 text-[#5A5A40]/20" />
           <p className="text-[#5A5A40]/60 font-medium">No data yet.</p>
           <p className="text-sm text-[#5A5A40]/40 mt-1">Complete a focus session or upload a study plan to see your stats here.</p>
         </div>
-      ) : (
+      )}
+
+      {hasData && (
         <>
           {/* ── Stat cards ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 gap-4">
@@ -167,60 +169,61 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
             <p className="text-sm text-white/60 mt-3 font-medium">— {quote.author}</p>
           </div>
 
-          {/* ── AI Stack (visible for technical reviewers) ────────────────────── */}
-          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <BookOpen className="w-5 h-5 text-[#5A5A40]" />
-              <h2 className="font-bold text-[#1A1A1A]">AI Under the Hood</h2>
-            </div>
-            <div className="space-y-3">
-              {[
-                {
-                  icon: '🧠',
-                  title: 'Gemini 2.5 Flash (LLM)',
-                  desc: 'Large language model for plan extraction, chat responses, summaries, and flashcard generation via Google GenAI API.',
-                  tag: 'Generative AI',
-                  tagColor: 'bg-purple-50 text-purple-700',
-                },
-                {
-                  icon: '🔍',
-                  title: 'RAG Pipeline (text-embedding-004)',
-                  desc: 'Documents are chunked (800 char, 150 overlap) and embedded with Gemini\'s text-embedding-004 model. Chat queries retrieve the top-5 most semantically relevant chunks via cosine similarity before generation.',
-                  tag: 'Vector Search · NLP',
-                  tagColor: 'bg-blue-50 text-blue-700',
-                },
-                {
-                  icon: '📅',
-                  title: 'SM-2 Spaced Repetition',
-                  desc: 'Flashcard review intervals are scheduled using the SuperMemo SM-2 algorithm (Wozniak, 1987). Each card tracks EaseFactor, interval, and repetitions to model the Ebbinghaus forgetting curve.',
-                  tag: 'Cognitive Science · Algorithm',
-                  tagColor: 'bg-green-50 text-green-700',
-                },
-                {
-                  icon: '📊',
-                  title: 'Topic Mastery Scoring',
-                  desc: 'Per-topic mastery is computed from cumulative SM-2 review outcomes (correct/total), displayed as a 0–100% score with colour-coded badges on topic cards.',
-                  tag: 'Knowledge Tracing',
-                  tagColor: 'bg-orange-50 text-orange-700',
-                },
-              ].map((item) => (
-                <div key={item.title} className="flex gap-4 p-4 rounded-2xl bg-[#F5F5F0]">
-                  <span className="text-2xl shrink-0">{item.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="font-bold text-sm text-[#1A1A1A]">{item.title}</span>
-                      <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider", item.tagColor)}>
-                        {item.tag}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#5A5A40]/70 leading-relaxed">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </>
       )}
+
+      {/* ── AI Stack — always visible ─────────────────────────────────────────── */}
+      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <BrainCircuit className="w-5 h-5 text-[#5A5A40]" />
+          <h2 className="font-bold text-[#1A1A1A]">AI Under the Hood</h2>
+        </div>
+        <div className="space-y-3">
+          {[
+            {
+              icon: '🧠',
+              title: 'Gemini 2.5 Flash (LLM)',
+              desc: 'Large language model for plan extraction, chat responses, summaries, and flashcard generation via Google GenAI API.',
+              tag: 'Generative AI',
+              tagColor: 'bg-purple-50 text-purple-700',
+            },
+            {
+              icon: '🔍',
+              title: 'RAG Pipeline (text-embedding-004)',
+              desc: "Documents are chunked (800 char, 150 overlap) and embedded with Gemini's text-embedding-004 model. Chat queries retrieve the top-5 most semantically relevant chunks via cosine similarity before generation.",
+              tag: 'Vector Search · NLP',
+              tagColor: 'bg-blue-50 text-blue-700',
+            },
+            {
+              icon: '📅',
+              title: 'SM-2 Spaced Repetition',
+              desc: 'Flashcard review intervals are scheduled using the SuperMemo SM-2 algorithm (Wozniak, 1987). Each card tracks EaseFactor, interval, and repetitions to model the Ebbinghaus forgetting curve.',
+              tag: 'Cognitive Science · Algorithm',
+              tagColor: 'bg-green-50 text-green-700',
+            },
+            {
+              icon: '📊',
+              title: 'Topic Mastery Scoring',
+              desc: 'Per-topic mastery is computed from cumulative SM-2 review outcomes (correct/total), displayed as a 0–100% score with colour-coded badges on topic cards.',
+              tag: 'Knowledge Tracing',
+              tagColor: 'bg-orange-50 text-orange-700',
+            },
+          ].map((item) => (
+            <div key={item.title} className="flex gap-4 p-4 rounded-2xl bg-[#F5F5F0]">
+              <span className="text-2xl shrink-0">{item.icon}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="font-bold text-sm text-[#1A1A1A]">{item.title}</span>
+                  <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider", item.tagColor)}>
+                    {item.tag}
+                  </span>
+                </div>
+                <p className="text-xs text-[#5A5A40]/70 leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
