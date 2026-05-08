@@ -74,7 +74,7 @@ const CelebrationModal = ({ onClose, focusMinutes }: { onClose: () => void; focu
   </AnimatePresence>
 );
 
-// ─── Flashcard Modal ──────────────────────────────────────────────────────────
+// ─── Flashcard Modal (SM-2 Spaced Repetition) ────────────────────────────────
 const FlashcardModal = ({
   cards,
   index,
@@ -82,6 +82,9 @@ const FlashcardModal = ({
   setIndex,
   setShowAnswer,
   onClose,
+  onGrade,
+  sm2Cards,
+  topicId,
 }: {
   cards: any[];
   index: number;
@@ -89,9 +92,22 @@ const FlashcardModal = ({
   setIndex: (i: number) => void;
   setShowAnswer: (v: boolean) => void;
   onClose: () => void;
+  onGrade?: (cardIndex: number, grade: number) => void;
+  sm2Cards?: Record<string, any>;
+  topicId?: string | null;
 }) => {
   const card = cards[index];
   const isLoading = cards.length === 0;
+  const cardId = topicId ? `${topicId}::${index}` : null;
+  const sm2 = cardId && sm2Cards ? sm2Cards[cardId] : null;
+
+  // SM-2 grade buttons — shown after answer is revealed
+  const grades = [
+    { label: 'Forgot', grade: 1, color: 'bg-red-100 text-red-700 hover:bg-red-200' },
+    { label: 'Hard',   grade: 3, color: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+    { label: 'Good',   grade: 4, color: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+    { label: 'Easy',   grade: 5, color: 'bg-green-100 text-green-700 hover:bg-green-200' },
+  ];
 
   return (
     <AnimatePresence>
@@ -115,13 +131,25 @@ const FlashcardModal = ({
             <X className="w-5 h-5 text-[#5A5A40]" />
           </button>
 
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex items-center gap-2 mb-2">
             <Sparkles className="w-5 h-5 text-[#5A5A40]" />
             <span className="font-bold text-sm text-[#5A5A40]">Flashcards</span>
             {!isLoading && (
               <span className="ml-auto text-xs text-[#5A5A40]/50 font-medium">{index + 1} / {cards.length}</span>
             )}
           </div>
+
+          {/* SM-2 due date badge */}
+          {sm2 && (
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/40">
+                Next review:
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-[#5A5A40]/10 text-[#5A5A40] rounded-full">
+                {sm2.dueDate || 'Today'} · interval {sm2.interval}d · EF {sm2.easeFactor}
+              </span>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="py-16 flex flex-col items-center gap-4">
@@ -147,7 +175,7 @@ const FlashcardModal = ({
                 transition={{ duration: 0.25 }}
                 onClick={() => setShowAnswer(!showAnswer)}
                 className={cn(
-                  "min-h-[180px] rounded-[24px] p-6 flex flex-col items-center justify-center text-center cursor-pointer select-none transition-colors",
+                  "min-h-[160px] rounded-[24px] p-6 flex flex-col items-center justify-center text-center cursor-pointer select-none transition-colors",
                   showAnswer
                     ? "bg-[#5A5A40] text-white"
                     : "bg-[#F5F5F0] text-[#1A1A1A] border-2 border-dashed border-[#5A5A40]/20"
@@ -161,29 +189,49 @@ const FlashcardModal = ({
                 </p>
               </motion.div>
 
-              {/* Navigation */}
-              <div className="flex items-center justify-between mt-6">
-                <button
-                  onClick={() => { setIndex(Math.max(0, index - 1)); setShowAnswer(false); }}
-                  disabled={index === 0}
-                  className="p-3 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-30 transition-colors"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setShowAnswer(!showAnswer)}
-                  className="px-6 py-2 bg-[#5A5A40]/10 text-[#5A5A40] rounded-full text-sm font-semibold hover:bg-[#5A5A40]/20 transition-colors"
-                >
-                  {showAnswer ? 'See Question' : 'Reveal Answer'}
-                </button>
-                <button
-                  onClick={() => { setIndex(Math.min(cards.length - 1, index + 1)); setShowAnswer(false); }}
-                  disabled={index === cards.length - 1}
-                  className="p-3 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-30 transition-colors"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
+              {/* SM-2 grade buttons (shown after answer revealed) */}
+              {showAnswer && onGrade ? (
+                <div className="mt-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-center text-[#5A5A40]/50 mb-3">
+                    How well did you remember?
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {grades.map(({ label, grade, color }) => (
+                      <button
+                        key={label}
+                        onClick={() => { onGrade(index, grade); }}
+                        className={cn("py-2 rounded-xl text-xs font-bold transition-colors", color)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* Navigation (shown before answer) */
+                <div className="flex items-center justify-between mt-6">
+                  <button
+                    onClick={() => { setIndex(Math.max(0, index - 1)); setShowAnswer(false); }}
+                    disabled={index === 0}
+                    className="p-3 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowAnswer(!showAnswer)}
+                    className="px-6 py-2 bg-[#5A5A40]/10 text-[#5A5A40] rounded-full text-sm font-semibold hover:bg-[#5A5A40]/20 transition-colors"
+                  >
+                    Reveal Answer
+                  </button>
+                  <button
+                    onClick={() => { setIndex(Math.min(cards.length - 1, index + 1)); setShowAnswer(false); }}
+                    disabled={index === cards.length - 1}
+                    className="p-3 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </>
           )}
         </motion.div>
@@ -328,6 +376,10 @@ export const DashboardContent = ({
   showCelebration,
   setShowCelebration,
   studySessions,
+  handleSM2Grade,
+  sm2Cards,
+  masteryData,
+  currentTopicId,
 }: any) => {
   const isDark = isDeepFocus || theme === 'dark';
 
@@ -380,6 +432,9 @@ export const DashboardContent = ({
           setIndex={setFlashcardIndex}
           setShowAnswer={setShowAnswer}
           onClose={() => setShowFlashcards(false)}
+          onGrade={handleSM2Grade}
+          sm2Cards={sm2Cards}
+          topicId={currentTopicId}
         />
       )}
 
@@ -868,6 +923,17 @@ export const DashboardContent = ({
                                               {topic.difficulty && (
                                                 <span className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md", topic.difficulty.toLowerCase() === 'easy' ? "bg-green-100 text-green-700" : topic.difficulty.toLowerCase() === 'medium' ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700")}>
                                                   {topic.difficulty}
+                                                </span>
+                                              )}
+                                              {/* Mastery score from SM-2 reviews */}
+                                              {masteryData?.[topic.id] && (
+                                                <span className={cn(
+                                                  "text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md flex items-center gap-1",
+                                                  masteryData[topic.id].score >= 80 ? "bg-emerald-100 text-emerald-700" :
+                                                  masteryData[topic.id].score >= 50 ? "bg-yellow-100 text-yellow-700" :
+                                                  "bg-red-100 text-red-700"
+                                                )}>
+                                                  <Trophy className="w-3 h-3" /> {masteryData[topic.id].score}% mastery
                                                 </span>
                                               )}
                                               {topic.estimatedTime && (

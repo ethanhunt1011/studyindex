@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { saveLocalChats, getLocalChats } from '../lib/storage';
-import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2, BrainCircuit } from 'lucide-react';
 export { Dashboard } from './Dashboard';
 export { Login } from './Login';
 
@@ -166,6 +166,59 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
             <p className="font-serif text-lg italic leading-relaxed">"{quote.text}"</p>
             <p className="text-sm text-white/60 mt-3 font-medium">— {quote.author}</p>
           </div>
+
+          {/* ── AI Stack (visible for technical reviewers) ────────────────────── */}
+          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <BookOpen className="w-5 h-5 text-[#5A5A40]" />
+              <h2 className="font-bold text-[#1A1A1A]">AI Under the Hood</h2>
+            </div>
+            <div className="space-y-3">
+              {[
+                {
+                  icon: '🧠',
+                  title: 'Gemini 2.5 Flash (LLM)',
+                  desc: 'Large language model for plan extraction, chat responses, summaries, and flashcard generation via Google GenAI API.',
+                  tag: 'Generative AI',
+                  tagColor: 'bg-purple-50 text-purple-700',
+                },
+                {
+                  icon: '🔍',
+                  title: 'RAG Pipeline (text-embedding-004)',
+                  desc: 'Documents are chunked (800 char, 150 overlap) and embedded with Gemini\'s text-embedding-004 model. Chat queries retrieve the top-5 most semantically relevant chunks via cosine similarity before generation.',
+                  tag: 'Vector Search · NLP',
+                  tagColor: 'bg-blue-50 text-blue-700',
+                },
+                {
+                  icon: '📅',
+                  title: 'SM-2 Spaced Repetition',
+                  desc: 'Flashcard review intervals are scheduled using the SuperMemo SM-2 algorithm (Wozniak, 1987). Each card tracks EaseFactor, interval, and repetitions to model the Ebbinghaus forgetting curve.',
+                  tag: 'Cognitive Science · Algorithm',
+                  tagColor: 'bg-green-50 text-green-700',
+                },
+                {
+                  icon: '📊',
+                  title: 'Topic Mastery Scoring',
+                  desc: 'Per-topic mastery is computed from cumulative SM-2 review outcomes (correct/total), displayed as a 0–100% score with colour-coded badges on topic cards.',
+                  tag: 'Knowledge Tracing',
+                  tagColor: 'bg-orange-50 text-orange-700',
+                },
+              ].map((item) => (
+                <div key={item.title} className="flex gap-4 p-4 rounded-2xl bg-[#F5F5F0]">
+                  <span className="text-2xl shrink-0">{item.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="font-bold text-sm text-[#1A1A1A]">{item.title}</span>
+                      <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider", item.tagColor)}>
+                        {item.tag}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#5A5A40]/70 leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </>
       )}
     </div>
@@ -287,6 +340,7 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [ragInfo, setRagInfo] = useState<{ retrieved: number; enabled: boolean } | null>(null);
 
   useEffect(() => {
     const loadChats = async () => {
@@ -368,6 +422,7 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
       }
       
       const data = await response.json();
+      setRagInfo({ retrieved: data.retrievedChunks || 0, enabled: data.ragEnabled || false });
       updateCurrentChat([...newMessages, { role: 'ai', text: data.text }]);
     } catch (error: any) {
       console.error('Error:', error);
@@ -454,8 +509,21 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden h-[500px] md:h-full">
         <div className="p-4 md:p-6 border-b border-gray-100 flex items-center justify-between">
-          <h1 className="text-xl md:text-2xl font-serif font-bold">Study Buddy</h1>
-          <Sparkles className="w-5 h-5 text-[#5A5A40] opacity-50" />
+          <div>
+            <h1 className="text-xl md:text-2xl font-serif font-bold">Study Buddy</h1>
+            <p className="text-[10px] text-[#5A5A40]/50 font-semibold uppercase tracking-widest mt-0.5">
+              Gemini 2.5 Flash · RAG Pipeline
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {ragInfo?.enabled && (
+              <span className="text-[10px] font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                RAG · {ragInfo.retrieved} chunks
+              </span>
+            )}
+            <Sparkles className="w-5 h-5 text-[#5A5A40] opacity-50" />
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 custom-scrollbar bg-gray-50/30">

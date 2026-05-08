@@ -13,82 +13,195 @@ const PORT = 3000;
 // 50 MB global limit — upload route sends base64-encoded files in JSON body
 app.use(express.json({ limit: '50mb' }));
 
-// Simple in-memory rate limiter
+// ─── Rate limiter ──────────────────────────────────────────────────────────────
 const rateLimit = new Map<string, { count: number; resetTime: number }>();
-const LIMIT = 50; // Max 50 requests
-const WINDOW = 60 * 1000; // per minute
+const LIMIT = 50;
+const WINDOW = 60 * 1000;
 
 const rateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const ip = req.ip || "unknown";
   const now = Date.now();
   const userLimit = rateLimit.get(ip) || { count: 0, resetTime: now + WINDOW };
-
-  if (now > userLimit.resetTime) {
-    userLimit.count = 0;
-    userLimit.resetTime = now + WINDOW;
-  }
-
-  if (userLimit.count >= LIMIT) {
-    return res.status(429).json({ error: "Too many requests. Please try again later." });
-  }
-
+  if (now > userLimit.resetTime) { userLimit.count = 0; userLimit.resetTime = now + WINDOW; }
+  if (userLimit.count >= LIMIT) return res.status(429).json({ error: "Too many requests. Please try again later." });
   userLimit.count++;
   rateLimit.set(ip, userLimit);
   next();
 };
 
-// Simple in-memory storage for file content
+// ─── In-memory stores ──────────────────────────────────────────────────────────
 const fileContents = new Map<string, string>();
-// Simple in-memory cache for chat responses
 const chatCache = new Map<string, string>();
 
+// RAG: per-document chunks + embeddings
+interface ChunkData {
+  chunks: string[];
+  embeddings: number[][];
+  embeddedAt: number;
+  model: string;
+}
+const documentChunks = new Map<string, ChunkData>();
+
+// ─── API key ───────────────────────────────────────────────────────────────────
 const getApiKey = () => {
-  // Prioritize VITE_GEMINI_API_KEY as it appears to be the one correctly set in secrets
   const rawKey = process.env.VITE_GEMINI_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY;
   return rawKey?.replace(/['"]/g, '').trim();
 };
 
-// Health / diagnostic endpoint — never exposes the key value
+// ─── Health / diagnostic endpoint ─────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   const apiKey = getApiKey();
   res.json({
     status: 'ok',
     geminiKey: apiKey ? `configured (${apiKey.length} chars)` : 'MISSING — set VITE_GEMINI_API_KEY on Render',
     nodeEnv: process.env.NODE_ENV || 'not set',
+    ragDocuments: documentChunks.size,
   });
 });
 
-// Helper: convert stored file (base64 data-URI) into Gemini content parts
+// ─── RAG: chunking, embedding, retrieval ──────────────────────────────────────
+
+/**
+ * Split text into overlapping chunks for embedding.
+ * Overlap ensures context continuity across chunk boundaries.
+ */
+function chunkText(text: string, chunkSize = 800, overlap = 150): string[] {
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    const end = Math.min(start + chunkSize, text.length);
+    const chunk = text.slice(start, end).trim();
+    if (chunk.length > 40) chunks.push(chunk);
+    if (end === text.length) break;
+    start += chunkSize - overlap;
+  }
+  return chunks;
+}
+
+/**
+ * Cosine similarity between two embedding vectors.
+ * Returns a value in [-1, 1]; higher = more semantically similar.
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (!a.length || !b.length || a.length !== b.length) return 0;
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot   += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-10);
+}
+
+/** Generate a single embedding vector via Gemini text-embedding-004 */
+async function generateEmbedding(text: string, ai: GoogleGenAI): Promise<number[]> {
+  try {
+    const result = await (ai.models as any).embedContent({
+      model: 'text-embedding-004',
+      content: text,
+    });
+    return result?.embedding?.values ?? [];
+  } catch (err) {
+    console.error('Embedding error:', err);
+    return [];
+  }
+}
+
+/**
+ * Retrieve top-k most semantically relevant chunks for a query.
+ * Uses cosine similarity against pre-computed chunk embeddings.
+ */
+function retrieveRelevantChunks(
+  queryEmbedding: number[],
+  fileId: string,
+  topK = 5
+): { chunk: string; score: number }[] {
+  const data = documentChunks.get(fileId);
+  if (!data || !data.chunks.length) return [];
+  return data.chunks
+    .map((chunk, i) => ({ chunk, score: cosineSimilarity(queryEmbedding, data.embeddings[i] || []) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+    .filter(r => r.score > 0.25);
+}
+
+// ─── File content helpers ──────────────────────────────────────────────────────
+
+/** Convert a stored base64 data-URI into Gemini content parts */
 function fileToContentParts(content: string, mimeType: string): any[] {
   if (mimeType && (mimeType.startsWith('image/') || mimeType === 'application/pdf')) {
-    // Images and PDFs: send as inlineData (Gemini supports both natively)
     const base64Data = content.includes(',') ? content.split(',')[1] : content;
     return [{ inlineData: { data: base64Data, mimeType } }];
   }
-  // Text / unknown: decode the base64 data-URI back to a plain string
   let textContent = content;
   if (content.includes(',')) {
-    try {
-      textContent = Buffer.from(content.split(',')[1], 'base64').toString('utf-8');
-    } catch {
-      textContent = content; // fallback: send raw
-    }
+    try { textContent = Buffer.from(content.split(',')[1], 'base64').toString('utf-8'); }
+    catch { /* keep raw */ }
   }
   return [{ text: textContent }];
 }
 
+/** Decode a stored base64 data-URI to plain text (for RAG chunking) */
+function decodeToText(content: string): string {
+  if (!content.includes(',')) return content;
+  try { return Buffer.from(content.split(',')[1], 'base64').toString('utf-8'); }
+  catch { return content; }
+}
+
+// ─── /api/upload ──────────────────────────────────────────────────────────────
 app.post("/api/upload", (req, res) => {
   const { content, mimeType } = req.body;
   console.log('Upload received, mimeType:', mimeType, 'content length:', content?.length);
   const fileId = Date.now().toString();
   fileContents.set(fileId, JSON.stringify({ content, mimeType }));
   res.json({ fileId });
+
+  // Non-blocking: chunk + embed text documents for RAG pipeline
+  if (!mimeType?.startsWith('image/') && mimeType !== 'application/pdf') {
+    setImmediate(async () => {
+      try {
+        const apiKey = getApiKey();
+        if (!apiKey) return;
+        const textContent = decodeToText(content);
+        const chunks = chunkText(textContent);
+        if (!chunks.length) return;
+        console.log(`RAG: embedding ${chunks.length} chunks for fileId ${fileId}`);
+        const ai = new GoogleGenAI({ apiKey });
+        const embeddings: number[][] = [];
+        for (const chunk of chunks) {
+          embeddings.push(await generateEmbedding(chunk, ai));
+          await new Promise(r => setTimeout(r, 80)); // gentle rate-limit
+        }
+        documentChunks.set(fileId, {
+          chunks,
+          embeddings,
+          embeddedAt: Date.now(),
+          model: 'text-embedding-004',
+        });
+        console.log(`RAG: ready — ${embeddings.filter(e => e.length).length}/${chunks.length} chunks embedded`);
+      } catch (err) {
+        console.error('RAG background embedding error:', err);
+      }
+    });
+  }
 });
 
+/** RAG status endpoint — lets the frontend know when embeddings are ready */
+app.get("/api/rag-status/:fileId", (req, res) => {
+  const data = documentChunks.get(req.params.fileId);
+  res.json({
+    ready: !!data && data.embeddings.some(e => e.length > 0),
+    chunkCount: data?.chunks.length ?? 0,
+    embeddedChunks: data?.embeddings.filter(e => e.length > 0).length ?? 0,
+    model: data?.model ?? null,
+    embeddedAt: data?.embeddedAt ?? null,
+  });
+});
+
+// ─── /api/summarize ───────────────────────────────────────────────────────────
 app.post("/api/summarize", rateLimiter, async (req, res) => {
   const { fileId } = req.body;
   const fileData = fileContents.get(fileId);
-  console.log('Summarize requested for fileId:', fileId, 'fileData exists:', !!fileData);
   if (!fileData) return res.status(404).json({ error: "File not found" });
 
   const cacheKey = `sum:${fileId}`;
@@ -96,17 +209,12 @@ app.post("/api/summarize", rateLimiter, async (req, res) => {
 
   try {
     const { content, mimeType } = JSON.parse(fileData);
-    console.log('Summarizing, mimeType:', mimeType);
     const apiKey = getApiKey();
-    
-    if (!apiKey) {
-      console.error('API key is missing');
-      return res.status(500).json({ error: 'Server configuration error.' });
-    }
-    console.log('API key present:', !!apiKey, 'Starts with:', apiKey.substring(0, 5));
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+
     const ai = new GoogleGenAI({ apiKey });
     const fileParts = fileToContentParts(content, mimeType);
-    const instruction = mimeType && mimeType.startsWith('image/')
+    const instruction = mimeType?.startsWith('image/')
       ? "Summarize this image. Use a neat, clean, point-based format with bullet points instead of paragraphs."
       : "Summarize the above content. Use a neat, clean, point-based format with bullet points instead of paragraphs.";
     const contents: any[] = [...fileParts, { text: instruction }];
@@ -115,7 +223,6 @@ app.post("/api/summarize", rateLimiter, async (req, res) => {
       model: 'gemini-2.5-flash',
       contents: { parts: contents },
     });
-    console.log('Gemini response received');
     const summary = response.text || "";
     chatCache.set(cacheKey, summary);
     res.json({ summary });
@@ -125,17 +232,15 @@ app.post("/api/summarize", rateLimiter, async (req, res) => {
   }
 });
 
+// ─── /api/schedule ────────────────────────────────────────────────────────────
 app.post("/api/schedule", rateLimiter, async (req, res) => {
   const { fileId, deadlines } = req.body;
   const content = fileId ? fileContents.get(fileId) : "";
-  
   if (!content) return res.status(400).json({ error: "No study material provided." });
 
   try {
     const apiKey = getApiKey();
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Server configuration error.' });
-    }
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -163,6 +268,7 @@ app.post("/api/schedule", rateLimiter, async (req, res) => {
   }
 });
 
+// ─── /api/extract-plan ────────────────────────────────────────────────────────
 app.post("/api/extract-plan", rateLimiter, async (req, res) => {
   const { fileId } = req.body;
   const fileData = fileContents.get(fileId);
@@ -171,14 +277,12 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
   try {
     const { content, mimeType } = JSON.parse(fileData);
     const apiKey = getApiKey();
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Server configuration error.' });
-    }
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
     const ai = new GoogleGenAI({ apiKey });
     const fileParts = fileToContentParts(content, mimeType);
     const contents: any[] = [
       ...fileParts,
-      { text: `Extract the hierarchy: Units -> Chapters -> Topics. 
+      { text: `Extract the hierarchy: Units -> Chapters -> Topics.
     For each Topic:
     1. Determine difficulty (Easy, Medium, Complex).
     2. Rate importance (High, Medium, Low).
@@ -242,7 +346,6 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
         }
       }
     });
-    
     res.json(JSON.parse(response.text || "{}"));
   } catch (error: any) {
     console.error('Error in extract-plan:', error);
@@ -250,6 +353,7 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
   }
 });
 
+// ─── /api/flashcards ─────────────────────────────────────────────────────────
 app.post("/api/flashcards", rateLimiter, async (req, res) => {
   const { topicTitle, context } = req.body;
   if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
@@ -260,7 +364,6 @@ app.post("/api/flashcards", rateLimiter, async (req, res) => {
   try {
     const apiKey = getApiKey();
     if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
-
     const ai = new GoogleGenAI({ apiKey });
     const prompt = context
       ? `Generate 5 concise flashcards for the topic "${topicTitle}". Extra context: ${context}.`
@@ -284,7 +387,6 @@ app.post("/api/flashcards", rateLimiter, async (req, res) => {
         }
       }
     });
-
     const text = response.text || "[]";
     chatCache.set(cacheKey, text);
     res.json(JSON.parse(text));
@@ -294,46 +396,64 @@ app.post("/api/flashcards", rateLimiter, async (req, res) => {
   }
 });
 
+// ─── /api/chat (RAG-enhanced) ─────────────────────────────────────────────────
 app.post("/api/chat", rateLimiter, async (req, res) => {
   const { input, fileId } = req.body;
   const fileData = fileId ? fileContents.get(fileId) : null;
   const apiKey = getApiKey();
-  
-  if (!apiKey) {
-    console.error('API key is not set');
-    return res.status(500).json({ error: 'Server configuration error.' });
-  }
-
-  const cacheKey = `chat:${fileId || 'no-file'}:${input}`;
-  if (chatCache.has(cacheKey)) return res.json({ text: chatCache.get(cacheKey) });
+  if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const contents: any[] = [];
-    
+    let retrievedChunks = 0;
+    let ragEnabled = false;
+
     if (fileData) {
       const { content, mimeType } = JSON.parse(fileData);
-      contents.push(...fileToContentParts(content, mimeType));
+      const ragData = fileId ? documentChunks.get(fileId) : null;
+
+      if (ragData && ragData.embeddings.some(e => e.length > 0)) {
+        // ── RAG: embed query → cosine similarity → retrieve top-k chunks ──
+        const queryEmbedding = await generateEmbedding(input, ai);
+        const relevant = retrieveRelevantChunks(queryEmbedding, fileId!, 5);
+
+        if (relevant.length > 0) {
+          const context = relevant.map((r, i) => `[Chunk ${i + 1} | relevance: ${r.score.toFixed(2)}]\n${r.chunk}`).join('\n\n---\n\n');
+          contents.push({ text: `Context retrieved via semantic search (RAG):\n\n${context}\n\n` });
+          retrievedChunks = relevant.length;
+          ragEnabled = true;
+          console.log(`RAG: retrieved ${relevant.length} chunks (top score: ${relevant[0]?.score.toFixed(3)})`);
+        } else {
+          // Query embedding worked but nothing was relevant enough — use full doc
+          contents.push(...fileToContentParts(content, mimeType));
+        }
+      } else {
+        // No embeddings (image/PDF or still computing) — full-doc fallback
+        contents.push(...fileToContentParts(content, mimeType));
+      }
     }
+
     contents.push({ text: `Question: ${input}` });
-      
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: { parts: contents },
       config: {
-        systemInstruction: "You are a helpful study buddy. Answer questions based on the provided context if available, otherwise answer generally."
+        systemInstruction: "You are a helpful study buddy. Answer questions based on the provided context if available, otherwise answer generally. Be concise and educational."
       }
     });
     const text = response.text || "";
-    chatCache.set(cacheKey, text);
-    res.json({ text });
+    // Only cache non-RAG responses (RAG responses depend on query-specific retrieval)
+    if (!ragEnabled) chatCache.set(`chat:${fileId || 'no-file'}:${input}`, text);
+    res.json({ text, retrievedChunks, ragEnabled });
   } catch (error: any) {
     console.error('Error in /api/chat:', error);
     res.status(500).json({ error: error?.message || 'Error generating response.' });
   }
 });
 
-// Vite middleware setup
+// ─── Vite middleware setup ────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== "production") {
   const { createServer } = await import("vite");
   const vite = await createServer({

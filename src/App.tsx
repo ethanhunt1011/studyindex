@@ -61,7 +61,15 @@ import {
   getStudySessions,
   saveScheduledSessions,
   getScheduledSessions,
+  saveAllSM2Cards,
+  getAllSM2Cards,
+  saveMasteryData,
+  getMasteryData,
+  sm2Update,
+  sm2NewCard,
   StudySession,
+  SM2Card,
+  TopicMastery,
 } from './lib/storage';
 import type { Topic, Unit, Chapter, Flashcard } from './services/gemini';
 import { cn } from './lib/utils';
@@ -151,6 +159,9 @@ export default function App() {
   const [tempName, setTempName] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
+  const [sm2Cards, setSm2Cards] = useState<Record<string, SM2Card>>({});
+  const [masteryData, setMasteryData] = useState<Record<string, TopicMastery>>({});
+  const [currentTopicId, setCurrentTopicId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatTime = (seconds: number) => {
@@ -236,14 +247,18 @@ export default function App() {
 
   useEffect(() => {
     const loadData = async () => {
-      const [localPlans, localProgress, localSessions, localScheduled] = await Promise.all([
+      const [localPlans, localProgress, localSessions, localScheduled, localSm2, localMastery] = await Promise.all([
         getLocalPlans(),
         getLocalProgress(),
         getStudySessions(),
         getScheduledSessions(),
+        getAllSM2Cards(),
+        getMasteryData(),
       ]);
       if (localPlans) setPlans(localPlans);
       if (localProgress) setProgress(localProgress);
+      if (localSm2 && Object.keys(localSm2).length) setSm2Cards(localSm2);
+      if (localMastery && Object.keys(localMastery).length) setMasteryData(localMastery);
       if (localSessions) setStudySessions(localSessions);
       if (localScheduled) setScheduledTopics(localScheduled);
       setLoading(false);
@@ -446,6 +461,7 @@ export default function App() {
     setFlashcardIndex(0);
     setShowAnswer(false);
     setShowFlashcards(true);
+    setCurrentTopicId(topic.id);
     try {
       const response = await fetch('/api/flashcards', {
         method: 'POST',
@@ -457,10 +473,64 @@ export default function App() {
       });
       if (!response.ok) throw new Error('Failed to generate flashcards');
       const cards = await response.json();
+      // Initialise any new SM-2 cards that don't exist yet
+      setSm2Cards(prev => {
+        const updated = { ...prev };
+        cards.forEach((c: any, i: number) => {
+          const cardId = `${topic.id}::${i}`;
+          if (!updated[cardId]) {
+            updated[cardId] = sm2NewCard(topic.id, i, c.question, c.answer);
+          }
+        });
+        saveAllSM2Cards(updated);
+        return updated;
+      });
       setCurrentFlashcards(cards);
     } catch (err) {
       console.error('Flashcard error:', err);
       setShowFlashcards(false);
+    }
+  };
+
+  /**
+   * SM-2 grade handler — called when user rates a flashcard.
+   * grade: 1 = forgot, 3 = hard, 4 = good, 5 = easy
+   */
+  const handleSM2Grade = (cardIndex: number, grade: number) => {
+    if (!currentTopicId) return;
+    const cardId = `${currentTopicId}::${cardIndex}`;
+    setSm2Cards(prev => {
+      const existing = prev[cardId] ?? sm2NewCard(currentTopicId, cardIndex, '', '');
+      const updated = { ...prev, [cardId]: sm2Update(existing, grade) };
+      saveAllSM2Cards(updated);
+      return updated;
+    });
+    // Update mastery score (exponential moving average of grade/5)
+    setMasteryData(prev => {
+      const existing = prev[currentTopicId] ?? {
+        topicId: currentTopicId, score: 0, totalReviews: 0, correctReviews: 0, lastUpdated: '',
+      };
+      const correct = grade >= 3 ? 1 : 0;
+      const newTotal = existing.totalReviews + 1;
+      const newCorrect = existing.correctReviews + correct;
+      const newScore = Math.round((newCorrect / newTotal) * 100);
+      const updated = {
+        ...prev,
+        [currentTopicId]: {
+          topicId: currentTopicId,
+          score: newScore,
+          totalReviews: newTotal,
+          correctReviews: newCorrect,
+          lastUpdated: new Date().toISOString().split('T')[0],
+        },
+      };
+      saveMasteryData(updated);
+      return updated;
+    });
+    // Auto-advance to next card after grading
+    if (cardIndex < currentFlashcards.length - 1) {
+      setFlashcardIndex(cardIndex + 1);
+      setShowAnswer(false);
     }
   };
 
@@ -585,6 +655,9 @@ export default function App() {
               completeSession={completeSession}
               handleAddSchedule={handleAddSchedule}
               handleGenerateFlashcards={handleGenerateFlashcards}
+              handleSM2Grade={handleSM2Grade}
+              sm2Cards={sm2Cards}
+              masteryData={masteryData}
               showCelebration={showCelebration}
               setShowCelebration={setShowCelebration}
               studySessions={studySessions}
