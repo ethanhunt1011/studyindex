@@ -235,11 +235,29 @@ const MindMapModal = ({ topic, onClose }: { topic: any; onClose: () => void }) =
 
   // ── SVG layout ──────────────────────────────────────────────────────────────
   const PALETTE = ['#5A5A40', '#8B7355', '#3F6B6E', '#7B4F3A', '#6B5A8B', '#4F8B6B'];
-  const W = 720, H = 560, CX = W / 2, CY = H / 2;
+  // Larger canvas with generous padding so no node clips at the edge.
+  const W = 960, H = 740, CX = W / 2, CY = H / 2;
   const branches = data?.branches || [];
   const branchAngles = branches.map((_, i) => (i / branches.length) * 2 * Math.PI - Math.PI / 2);
-  const BRANCH_R = 170;
-  const LEAF_R = 90;
+  const BRANCH_R = 170;   // centre → branch node centre
+  const BRANCH_NR = 34;   // branch node radius
+  const LEAF_R = 105;     // branch node → leaf dot
+  const LEAF_DOT_R = 5;
+  const LABEL_GAP = 14;   // gap between dot edge and label start
+
+  /** Wrap a string into lines of at most `maxCh` characters. */
+  const wrapText = (text: string, maxCh = 12): string[] => {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let line = '';
+    for (const w of words) {
+      const candidate = line ? line + ' ' + w : w;
+      if (candidate.length > maxCh) { if (line) lines.push(line); line = w; }
+      else line = candidate;
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
 
   return (
     <AnimatePresence>
@@ -283,81 +301,121 @@ const MindMapModal = ({ topic, onClose }: { topic: any; onClose: () => void }) =
           )}
 
           {data && !loading && (
-            <div className="w-full overflow-x-auto bg-gradient-to-br from-[#FAFAF5] to-[#F0F0E8] rounded-3xl p-4">
-              <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ minHeight: 400 }}>
-                {/* Branch lines (drawn first so they sit behind leaf circles) */}
+            <div className="w-full bg-gradient-to-br from-[#FAFAF5] to-[#F0F0E8] rounded-3xl p-4">
+              <svg
+                viewBox={`0 0 ${W} ${H}`}
+                className="w-full h-auto"
+                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              >
+                {/* ── Connector lines (rendered first, sits behind everything) ── */}
                 {branches.map((branch, i) => {
                   const angle = branchAngles[i];
                   const bx = CX + Math.cos(angle) * BRANCH_R;
                   const by = CY + Math.sin(angle) * BRANCH_R;
                   const color = PALETTE[i % PALETTE.length];
+                  const leafCount = branch.leaves.length;
+                  // Adaptive spread: wider when there are more leaves (capped at 100°).
+                  const leafSpread = Math.min(Math.PI * 0.78, Math.PI / 2.5 + Math.max(0, leafCount - 3) * 0.09);
                   return (
-                    <g key={`b-${i}`}>
-                      <line x1={CX} y1={CY} x2={bx} y2={by} stroke={color} strokeWidth={2.5} opacity={0.6} />
+                    <g key={`lines-${i}`}>
+                      {/* Centre → branch */}
+                      <line x1={CX} y1={CY} x2={bx} y2={by} stroke={color} strokeWidth={2.5} opacity={0.55} />
+                      {/* Branch → each leaf */}
                       {(branch.leaves || []).map((_, li) => {
-                        const leafCount = branch.leaves.length;
-                        const leafSpread = Math.PI / 2.5;
-                        const leafAngle = angle - leafSpread / 2 + (leafCount > 1 ? (li / (leafCount - 1)) * leafSpread : leafSpread / 2);
+                        const leafAngle = leafCount === 1
+                          ? angle
+                          : angle - leafSpread / 2 + (li / (leafCount - 1)) * leafSpread;
                         const lx = bx + Math.cos(leafAngle) * LEAF_R;
                         const ly = by + Math.sin(leafAngle) * LEAF_R;
-                        return <line key={`l-${i}-${li}`} x1={bx} y1={by} x2={lx} y2={ly} stroke={color} strokeWidth={1.2} opacity={0.4} />;
+                        return <line key={`ll-${i}-${li}`} x1={bx} y1={by} x2={lx} y2={ly} stroke={color} strokeWidth={1.2} opacity={0.35} />;
                       })}
                     </g>
                   );
                 })}
 
-                {/* Leaf nodes */}
+                {/* ── Leaf dots + labels ───────────────────────────────────── */}
                 {branches.map((branch, i) => {
                   const angle = branchAngles[i];
                   const bx = CX + Math.cos(angle) * BRANCH_R;
                   const by = CY + Math.sin(angle) * BRANCH_R;
                   const color = PALETTE[i % PALETTE.length];
+                  const leafCount = branch.leaves.length;
+                  const leafSpread = Math.min(Math.PI * 0.78, Math.PI / 2.5 + Math.max(0, leafCount - 3) * 0.09);
                   return (branch.leaves || []).map((leaf, li) => {
-                    const leafCount = branch.leaves.length;
-                    const leafSpread = Math.PI / 2.5;
-                    const leafAngle = angle - leafSpread / 2 + (leafCount > 1 ? (li / (leafCount - 1)) * leafSpread : leafSpread / 2);
+                    const leafAngle = leafCount === 1
+                      ? angle
+                      : angle - leafSpread / 2 + (li / (leafCount - 1)) * leafSpread;
                     const lx = bx + Math.cos(leafAngle) * LEAF_R;
                     const ly = by + Math.sin(leafAngle) * LEAF_R;
+
+                    // Label positioning: push label away from the map centre so it
+                    // never sits on top of connecting lines or the branch node.
+                    const dxFromCenter = lx - CX;
+                    const dyFromCenter = ly - CY;
+                    const anchor = dxFromCenter > 25 ? 'start' : dxFromCenter < -25 ? 'end' : 'middle';
+                    const lbx = anchor === 'start'  ? lx + LEAF_DOT_R + LABEL_GAP
+                               : anchor === 'end'   ? lx - LEAF_DOT_R - LABEL_GAP
+                               : lx;
+                    // For vertically-centred leaves (left/right), centre text on y;
+                    // for near-horizontal leaves (top/bottom), push label up or down.
+                    const lby = Math.abs(dxFromCenter) > 25
+                      ? ly + 3.5                                     // vertically centre on dot
+                      : dyFromCenter < 0 ? ly - LEAF_DOT_R - LABEL_GAP  // above dot
+                                         : ly + LEAF_DOT_R + LABEL_GAP + 9; // below dot
+                    const lines = wrapText(leaf, 13);
+                    const lineH = 12;
+
                     return (
                       <g key={`leaf-${i}-${li}`}>
-                        <circle cx={lx} cy={ly} r={5} fill={color} opacity={0.5} />
-                        <foreignObject x={lx - 60} y={ly + 8} width={120} height={40}>
-                          <div className="text-center text-[10px] font-medium text-[#5A5A40] leading-tight px-1">
-                            {leaf}
-                          </div>
-                        </foreignObject>
+                        <circle cx={lx} cy={ly} r={LEAF_DOT_R} fill={color} opacity={0.55} />
+                        <text textAnchor={anchor} fontSize="9.5" fontWeight="500" fill="#4A4A30">
+                          {lines.map((ln, idx) => (
+                            <tspan key={idx} x={lbx} y={lby + idx * lineH}>{ln}</tspan>
+                          ))}
+                        </text>
                       </g>
                     );
                   });
                 })}
 
-                {/* Branch nodes (drawn after lines, before root) */}
+                {/* ── Branch nodes ─────────────────────────────────────────── */}
                 {branches.map((branch, i) => {
                   const angle = branchAngles[i];
                   const bx = CX + Math.cos(angle) * BRANCH_R;
                   const by = CY + Math.sin(angle) * BRANCH_R;
                   const color = PALETTE[i % PALETTE.length];
+                  const lines = wrapText(branch.name, 11);
+                  const lineH = 13;
+                  // Vertically centre the text block inside the circle.
+                  const textTopY = by - ((lines.length - 1) * lineH) / 2;
                   return (
                     <g key={`bn-${i}`}>
-                      <circle cx={bx} cy={by} r={32} fill={color} opacity={0.18} />
-                      <circle cx={bx} cy={by} r={24} fill={color} />
-                      <foreignObject x={bx - 70} y={by - 10} width={140} height={28}>
-                        <div className="text-center text-[11px] font-bold text-white leading-tight px-2">
-                          {branch.name}
-                        </div>
-                      </foreignObject>
+                      <circle cx={bx} cy={by} r={BRANCH_NR + 10} fill={color} opacity={0.14} />
+                      <circle cx={bx} cy={by} r={BRANCH_NR} fill={color} />
+                      <text textAnchor="middle" fontSize="10.5" fontWeight="700" fill="white">
+                        {lines.map((ln, idx) => (
+                          <tspan key={idx} x={bx} y={textTopY + idx * lineH}>{ln}</tspan>
+                        ))}
+                      </text>
                     </g>
                   );
                 })}
 
-                {/* Root node */}
-                <circle cx={CX} cy={CY} r={60} fill="#1A1A1A" opacity={0.06} />
-                <circle cx={CX} cy={CY} r={48} fill="#1A1A1A" />
-                <foreignObject x={CX - 70} y={CY - 18} width={140} height={36}>
-                  <div className="text-center text-xs font-bold text-white leading-tight px-2 flex items-center justify-center h-full">
-                    {data.root}
-                  </div>
-                </foreignObject>
+                {/* ── Root node ────────────────────────────────────────────── */}
+                <circle cx={CX} cy={CY} r={62} fill="#1A1A1A" opacity={0.07} />
+                <circle cx={CX} cy={CY} r={50} fill="#1A1A1A" />
+                {(() => {
+                  const lines = wrapText(data.root, 12);
+                  const lineH = 14;
+                  const topY = CY - ((lines.length - 1) * lineH) / 2;
+                  return (
+                    <text textAnchor="middle" fontSize="11" fontWeight="700" fill="white">
+                      {lines.map((ln, idx) => (
+                        <tspan key={idx} x={CX} y={topY + idx * lineH}>{ln}</tspan>
+                      ))}
+                    </text>
+                  );
+                })()}
               </svg>
 
               <p className="text-[10px] text-[#5A5A40]/50 text-center mt-3">
