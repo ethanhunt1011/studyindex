@@ -688,7 +688,7 @@ const PracticeExamModal = ({
                 </div>
               )}
 
-              {q.type === 'short' && phase === 'question' && (
+              {q.type !== 'mcq' && phase === 'question' && (
                 <div className="mb-4">
                   <textarea
                     value={shortAnswerText}
@@ -706,7 +706,7 @@ const PracticeExamModal = ({
                 </div>
               )}
 
-              {q.type === 'short' && phase === 'feedback' && (
+              {q.type !== 'mcq' && phase === 'feedback' && (
                 <div className="mb-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-[#5A5A40]/40 mb-1">Your Answer</p>
                   <p className="text-sm text-[#1A1A1A]">{shortAnswerText}</p>
