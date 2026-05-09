@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { saveLocalChats, getLocalChats } from '../lib/storage';
-import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2, BrainCircuit, GraduationCap, TrendingUp, Brain, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ACHIEVEMENTS, levelFromXP, xpProgressInLevel, type UserStats } from '../lib/gamification';
+import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2, BrainCircuit, GraduationCap, TrendingUp, Brain, AlertCircle, ChevronDown, ChevronUp, Mic, Volume2, VolumeX, Award, Download, X } from 'lucide-react';
 export { Dashboard } from './Dashboard';
 export { Login } from './Login';
 
@@ -17,6 +18,7 @@ interface AnalyticsProps {
   handleSaveExamSettings?: (s: any) => void;
   practiceHistory?: any[];
   sm2Cards?: Record<string, any>;
+  userStats?: any;
 }
 
 export const Analytics = ({ studySessions = [], plans = [], progress = {}, profile, masteryData = {}, examSettings, handleSaveExamSettings, practiceHistory = [], sm2Cards = {} }: AnalyticsProps) => {
@@ -702,7 +704,7 @@ interface ChatSession {
   updatedAt: number;
 }
 
-export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
+export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; onMessageSent?: () => void }) => {
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -710,6 +712,55 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
   const [summarizing, setSummarizing] = useState(false);
   const [ragInfo, setRagInfo] = useState<{ retrieved: number; enabled: boolean } | null>(null);
   const [socraticMode, setSocraticMode] = useState(false);
+  // ─── Voice mode (Web Speech API) ──────────────────────────────────────────
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [speakResponses, setSpeakResponses] = useState(false);
+  const recognitionRef = React.useRef<any>(null);
+
+  // Detect Web Speech API on mount and prepare a recognizer.
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { setVoiceSupported(false); return; }
+    setVoiceSupported(true);
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognitionRef.current = recognition;
+    return () => { try { recognition.stop(); } catch {} };
+  }, []);
+
+  const toggleVoiceListening = () => {
+    const r = recognitionRef.current;
+    if (!r) return;
+    if (voiceListening) {
+      r.stop(); setVoiceListening(false); return;
+    }
+    setInput('');
+    r.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((res: any) => res[0].transcript)
+        .join('');
+      setInput(transcript);
+    };
+    r.onend = () => setVoiceListening(false);
+    r.onerror = () => setVoiceListening(false);
+    try { r.start(); setVoiceListening(true); }
+    catch { setVoiceListening(false); }
+  };
+
+  // Speak AI responses if voice mode is on
+  const speak = (text: string) => {
+    if (!speakResponses || typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+    } catch {}
+  };
 
   useEffect(() => {
     const loadChats = async () => {
@@ -793,6 +844,8 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
       const data = await response.json();
       setRagInfo({ retrieved: data.retrievedChunks || 0, enabled: data.ragEnabled || false });
       updateCurrentChat([...newMessages, { role: 'ai', text: data.text }]);
+      if (onMessageSent) onMessageSent();
+      speak(data.text);
     } catch (error: any) {
       console.error('Error:', error);
       updateCurrentChat([...newMessages, { role: 'ai', text: error.message }]);
@@ -904,6 +957,21 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
               <Brain className="w-3 h-3" />
               {socraticMode ? 'Socratic · ON' : 'Socratic'}
             </button>
+            {voiceSupported && (
+              <button
+                onClick={() => setSpeakResponses(p => !p)}
+                className={cn(
+                  "text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all border",
+                  speakResponses
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"
+                )}
+                title="Speak AI responses aloud"
+              >
+                {speakResponses ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+                {speakResponses ? 'Voice · ON' : 'Voice'}
+              </button>
+            )}
             <Sparkles className="w-5 h-5 text-[#5A5A40] opacity-50" />
           </div>
         </div>
@@ -965,7 +1033,21 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
                 }
               }}
             />
-            <button 
+            {voiceSupported && (
+              <button
+                onClick={toggleVoiceListening}
+                className={cn(
+                  "p-4 rounded-2xl font-bold shrink-0 shadow-md active:scale-95 transition-all",
+                  voiceListening
+                    ? "bg-red-500 text-white animate-pulse"
+                    : "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                )}
+                title={voiceListening ? "Stop recording" : "Voice input — speak your question"}
+              >
+                <Mic className="w-6 h-6" />
+              </button>
+            )}
+            <button
               onClick={handleSendMessage}
               disabled={loading || !input.trim()}
               className="bg-[#5A5A40] text-white p-4 rounded-2xl font-bold hover:bg-[#4A4A30] transition-colors disabled:opacity-50 shrink-0 shadow-md active:scale-95"
@@ -977,6 +1059,7 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
           </div>
           <div className="text-center mt-2 text-[10px] text-gray-400">
             StudyBuddy AI can make mistakes. Consider verifying important information.
+            {voiceListening && <span className="ml-2 text-red-500 font-bold">● Listening…</span>}
           </div>
         </div>
       </div>
@@ -984,11 +1067,13 @@ export const StudyBuddy = ({ fileId }: { fileId: string | null }) => {
   );
 };
 
-export const Settings = ({ theme, setTheme, profile, updateProfile }: { theme: 'day' | 'dark', setTheme: (t: 'day' | 'dark') => void, profile: any, updateProfile: (updates: any) => void }) => {
+export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, masteryData, studySessions }: { theme: 'day' | 'dark', setTheme: (t: 'day' | 'dark') => void, profile: any, updateProfile: (updates: any) => void, userStats?: any, masteryData?: any, studySessions?: any[] }) => {
   const [focusSound, setFocusSound] = React.useState(false);
   const [reminderTime, setReminderTime] = React.useState(profile?.reminderTime || '09:00');
   const [focusTime, setFocusTime] = React.useState(profile?.focusTime || 25);
   const [topicsForDay, setTopicsForDay] = React.useState(profile?.topicsForDay || 2);
+  const [showShareCard, setShowShareCard] = React.useState(false);
+  const shareCardRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -1049,6 +1134,253 @@ export const Settings = ({ theme, setTheme, profile, updateProfile }: { theme: '
             <input type="number" min="1" max="10" value={topicsForDay} onChange={(e) => setTopicsForDay(Number(e.target.value))} className={cn("w-20 p-2 rounded-xl border", theme === 'dark' ? "bg-[#0A0A0A] border-white/20" : "bg-white border-gray-200")} />
           </div>
         </div>
+
+        {/* ── Achievements Gallery ──────────────────────────────────────── */}
+        <div className={cn("p-6 rounded-[32px] shadow-sm border", theme === 'dark' ? "bg-[#1A1A1A] border-white/10" : "bg-white border-gray-100")}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-yellow-500" />
+              <h2 className="text-lg font-bold">Achievements</h2>
+            </div>
+            <span className={cn("text-xs font-bold px-2 py-1 rounded-md", theme === 'dark' ? "bg-white/10 text-white/70" : "bg-gray-100 text-[#5A5A40]")}>
+              {(userStats?.achievements?.length || 0)} / {ACHIEVEMENTS.length}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+            {ACHIEVEMENTS.map(a => {
+              const unlocked = userStats?.achievements?.includes(a.id);
+              return (
+                <div
+                  key={a.id}
+                  title={`${a.title} — ${a.description}`}
+                  className={cn(
+                    "aspect-square rounded-2xl flex flex-col items-center justify-center p-2 text-center transition-all relative overflow-hidden border",
+                    unlocked
+                      ? a.rarity === 'legendary' ? 'bg-gradient-to-br from-yellow-200 to-amber-300 border-yellow-400 shadow-md'
+                      : a.rarity === 'epic'      ? 'bg-gradient-to-br from-purple-100 to-purple-200 border-purple-300'
+                      : a.rarity === 'rare'      ? 'bg-gradient-to-br from-blue-100 to-blue-200 border-blue-300'
+                                                  : 'bg-gradient-to-br from-gray-100 to-gray-200 border-gray-300'
+                      : (theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200 grayscale opacity-50')
+                  )}
+                >
+                  <span className="text-2xl mb-0.5">{unlocked ? a.icon : '🔒'}</span>
+                  <p className={cn("text-[9px] font-bold uppercase tracking-wide leading-tight", unlocked ? 'text-[#1A1A1A]' : (theme === 'dark' ? 'text-white/40' : 'text-gray-500'))}>
+                    {a.title}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Shareable Progress Card ───────────────────────────────────── */}
+        <div className={cn("p-6 rounded-[32px] shadow-sm border", theme === 'dark' ? "bg-[#1A1A1A] border-white/10" : "bg-white border-gray-100")}>
+          <div className="flex items-center gap-2 mb-2">
+            <Share2 className="w-5 h-5 text-[#5A5A40]" />
+            <h2 className="text-lg font-bold">Share Your Progress</h2>
+          </div>
+          <p className={cn("text-sm mb-4", theme === 'dark' ? "text-gray-400" : "text-gray-500")}>
+            Generate a beautiful card with your stats — share it on Twitter, Instagram, LinkedIn, or with study friends.
+          </p>
+          <button
+            onClick={() => setShowShareCard(true)}
+            className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-[#5A5A40] to-[#3F3F2D] text-white font-bold text-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+          >
+            <Share2 className="w-4 h-4" />
+            Generate Share Card
+          </button>
+        </div>
+      </div>
+
+      {/* ── Share Card Modal ─────────────────────────────────────────────── */}
+      {showShareCard && (
+        <ShareCardModal
+          stats={userStats}
+          profile={profile}
+          masteryData={masteryData}
+          studySessions={studySessions}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── Shareable Progress Card Modal ───────────────────────────────────────────
+// Renders a glanceable card the user can download as a PNG and share on
+// social media. The card is drawn as SVG (so download keeps perfect quality)
+// and converted to PNG via a canvas + dataURL on demand.
+const ShareCardModal = ({ stats, profile, masteryData, studySessions, onClose }: {
+  stats: UserStats; profile: any; masteryData: any; studySessions: any[]; onClose: () => void;
+}) => {
+  const [downloading, setDownloading] = React.useState(false);
+  const svgRef = React.useRef<SVGSVGElement>(null);
+
+  const safeStats: UserStats = stats || {
+    xp: 0, totalReviews: 0, totalExams: 0, perfectExams: 0, topicsMastered: 0,
+    documentsUploaded: 0, studyBuddyMessages: 0, achievements: [],
+    lastQuestRefreshDate: '', questsCompletedToday: [],
+  };
+  const xpInfo = xpProgressInLevel(safeStats.xp);
+  const totalMinutes = (studySessions || []).reduce((s: number, x: any) => s + (x.durationMinutes || 0), 0);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const masteredTopics = (Object.values(masteryData || {}) as any[]).filter((m: any) => m.score >= 80).length;
+  const masteryArr = Object.values(masteryData || {}) as any[];
+  const avgMastery = masteryArr.length
+    ? Math.round(masteryArr.reduce((s: number, m: any) => s + (m.score || 0), 0) / masteryArr.length)
+    : 0;
+  const streak = profile?.streakCount || 0;
+  const displayName = profile?.displayName || 'Scholar';
+
+  // Convert the SVG node to a downloadable PNG.
+  const handleDownload = async () => {
+    if (!svgRef.current) return;
+    setDownloading(true);
+    try {
+      const svg = svgRef.current;
+      const xml = new XMLSerializer().serializeToString(svg);
+      const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200; canvas.height = 630; // OG image dims
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { setDownloading(false); return; }
+        ctx.fillStyle = '#F5F5F0';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(b => {
+          if (!b) { setDownloading(false); return; }
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(b);
+          a.download = `studyindex-progress-${Date.now()}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setDownloading(false);
+        }, 'image/png');
+      };
+      img.onerror = () => setDownloading(false);
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+    } catch (e) {
+      console.error(e);
+      setDownloading(false);
+    }
+  };
+
+  // Use Web Share API if available; fall back to download.
+  const handleShare = async () => {
+    if (typeof navigator !== 'undefined' && (navigator as any).share) {
+      try {
+        await (navigator as any).share({
+          title: `I'm on Level ${xpInfo.level} on StudyIndex`,
+          text: `📚 ${safeStats.totalReviews} cards reviewed · ${masteredTopics} topics mastered · ${streak}-day streak\nJoin me on StudyIndex!`,
+          url: 'https://studyindex.onrender.com',
+        });
+        return;
+      } catch {}
+    }
+    handleDownload();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 overflow-y-auto py-8" onClick={onClose}>
+      <div className="bg-white rounded-[40px] p-6 max-w-2xl w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 transition-colors z-10">
+          <X className="w-5 h-5 text-[#5A5A40]" />
+        </button>
+
+        <div className="flex items-center gap-2 mb-4">
+          <Share2 className="w-5 h-5 text-[#5A5A40]" />
+          <h2 className="font-bold text-lg text-[#1A1A1A]">Your StudyIndex Card</h2>
+        </div>
+
+        {/* SVG Card preview */}
+        <div className="rounded-3xl overflow-hidden border border-gray-200 bg-[#F5F5F0] mb-4">
+          <svg ref={svgRef} viewBox="0 0 1200 630" className="w-full h-auto" xmlns="http://www.w3.org/2000/svg">
+            {/* Background gradient */}
+            <defs>
+              <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#5A5A40" />
+                <stop offset="1" stopColor="#2A2A1A" />
+              </linearGradient>
+              <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#FCD34D" />
+                <stop offset="1" stopColor="#F59E0B" />
+              </linearGradient>
+            </defs>
+            <rect width="1200" height="630" fill="url(#bg)" />
+
+            {/* Decorative dots */}
+            <g opacity="0.06">
+              {Array.from({ length: 60 }).map((_, i) => (
+                <circle key={i} cx={(i * 73) % 1200} cy={((i * 41) % 600) + 30} r="2" fill="white" />
+              ))}
+            </g>
+
+            {/* Header */}
+            <text x="60" y="80" fill="white" fontSize="24" fontWeight="800" letterSpacing="6" opacity="0.5">STUDYINDEX</text>
+            <text x="60" y="160" fill="white" fontSize="56" fontWeight="800">{displayName.slice(0, 18)}</text>
+            <text x="60" y="200" fill="white" fontSize="22" opacity="0.6">AI-powered study companion</text>
+
+            {/* Big level circle */}
+            <circle cx="1010" cy="160" r="100" fill="url(#gold)" opacity="0.15" />
+            <circle cx="1010" cy="160" r="80" fill="url(#gold)" />
+            <text x="1010" y="155" fill="#3A2D00" fontSize="28" fontWeight="800" textAnchor="middle">LEVEL</text>
+            <text x="1010" y="195" fill="#3A2D00" fontSize="48" fontWeight="900" textAnchor="middle">{xpInfo.level}</text>
+
+            {/* XP bar */}
+            <rect x="60" y="250" width="900" height="14" rx="7" fill="white" opacity="0.15" />
+            <rect x="60" y="250" width={Math.max(8, 900 * xpInfo.pct)} height="14" rx="7" fill="url(#gold)" />
+            <text x="60" y="290" fill="white" fontSize="16" opacity="0.6">{safeStats.xp.toLocaleString()} XP · {Math.round(xpInfo.pct * 100)}% to Level {xpInfo.nextLevel}</text>
+
+            {/* Stats grid */}
+            {[
+              { label: 'CARDS REVIEWED', value: safeStats.totalReviews.toLocaleString(), x: 60 },
+              { label: 'TOPICS MASTERED', value: masteredTopics, x: 350 },
+              { label: 'HOURS STUDIED', value: totalHours, x: 640 },
+              { label: 'DAY STREAK', value: streak, x: 930 },
+            ].map((s, i) => (
+              <g key={i}>
+                <rect x={s.x} y="350" width="220" height="120" rx="20" fill="white" opacity="0.08" />
+                <text x={s.x + 110} y="395" fill="white" opacity="0.55" fontSize="14" fontWeight="700" letterSpacing="2" textAnchor="middle">{s.label}</text>
+                <text x={s.x + 110} y="445" fill="white" fontSize="44" fontWeight="900" textAnchor="middle">{s.value}</text>
+              </g>
+            ))}
+
+            {/* Mastery bar */}
+            <text x="60" y="525" fill="white" opacity="0.55" fontSize="14" fontWeight="700" letterSpacing="2">AVERAGE MASTERY</text>
+            <rect x="60" y="540" width="900" height="14" rx="7" fill="white" opacity="0.15" />
+            <rect x="60" y="540" width={Math.max(8, 900 * (avgMastery / 100))} height="14" rx="7" fill="#22C55E" />
+            <text x="980" y="552" fill="white" fontSize="20" fontWeight="800">{avgMastery}%</text>
+
+            {/* Footer */}
+            <text x="60" y="600" fill="white" opacity="0.4" fontSize="14">studyindex.onrender.com · Powered by Gemini 2.5 Flash</text>
+            <text x="1140" y="600" fill="white" opacity="0.4" fontSize="14" textAnchor="end">{safeStats.achievements?.length || 0} achievements unlocked</text>
+          </svg>
+        </div>
+
+        {/* Action buttons */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="px-4 py-3 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {downloading ? 'Downloading…' : 'Download PNG'}
+          </button>
+          <button
+            onClick={handleShare}
+            className="px-4 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold text-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+          >
+            <Share2 className="w-4 h-4" /> Share
+          </button>
+        </div>
+        <p className="text-[10px] text-gray-400 text-center mt-3">
+          Card is generated client-side as 1200×630 PNG (perfect for Twitter/LinkedIn previews).
+        </p>
       </div>
     </div>
   );

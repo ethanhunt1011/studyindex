@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   EXAM_SETTINGS: 'exam_settings',
   PRACTICE_HISTORY: 'practice_history',
   WEEKLY_GOAL: 'weekly_goal',
+  USER_STATS: 'user_stats',
 };
 
 // ─── SM-2 Spaced Repetition ───────────────────────────────────────────────────
@@ -298,6 +299,19 @@ export const saveWeeklyGoal = async (goal: WeeklyGoal) => {
 export const getWeeklyGoal = async (): Promise<WeeklyGoal | null> => {
   try {
     const { value } = await Preferences.get({ key: STORAGE_KEYS.WEEKLY_GOAL });
+    return value ? JSON.parse(value) : null;
+  } catch { return null; }
+};
+
+// ─── Gamification: User Stats ────────────────────────────────────────────────
+export const saveUserStats = async (stats: any) => {
+  try { await Preferences.set({ key: STORAGE_KEYS.USER_STATS, value: JSON.stringify(stats) }); }
+  catch (e) { console.error('Failed to save user stats:', e); }
+};
+
+export const getUserStats = async (): Promise<any | null> => {
+  try {
+    const { value } = await Preferences.get({ key: STORAGE_KEYS.USER_STATS });
     return value ? JSON.parse(value) : null;
   } catch { return null; }
 };

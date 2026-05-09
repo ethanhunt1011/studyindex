@@ -582,6 +582,97 @@ Provide brief, encouraging feedback (2 sentences max).`,
   }
 });
 
+// ─── /api/mind-map ───────────────────────────────────────────────────────────
+// Generate a hierarchical concept map for a topic.
+// Returns a typed tree the frontend renders as an SVG radial mind map.
+app.post("/api/mind-map", rateLimiter, async (req, res) => {
+  const { topicTitle, context } = req.body;
+  if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
+
+  const cacheKey = `mindmap:${topicTitle}`;
+  if (chatCache.has(cacheKey)) return res.json(JSON.parse(chatCache.get(cacheKey)!));
+
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Generate a concept mind map for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+Return a hierarchical tree:
+- Root = the main topic
+- 4-6 primary branches (core sub-concepts or aspects)
+- Each branch has 2-4 leaf nodes (specific details, examples, or related ideas)
+Keep node labels short (2-5 words). Make it pedagogically useful — think how an expert would chunk this topic for a student.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            root: { type: Type.STRING },
+            branches: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  leaves: { type: Type.ARRAY, items: { type: Type.STRING } },
+                },
+                required: ["name", "leaves"],
+              },
+            },
+          },
+          required: ["root", "branches"],
+        },
+      },
+    });
+    const text = response.text || '{"root":"","branches":[]}';
+    chatCache.set(cacheKey, text);
+    res.json(JSON.parse(text));
+  } catch (error: any) {
+    console.error('Error in /api/mind-map:', error);
+    res.status(500).json({ error: error?.message || 'Error generating mind map.' });
+  }
+});
+
+// ─── /api/related-topics ─────────────────────────────────────────────────────
+// Given a topic and the user's plan topic list, find which other topics are
+// semantically related — used to render "Related concepts" links in study notes.
+app.post("/api/related-topics", rateLimiter, async (req, res) => {
+  const { topicTitle, allTopics } = req.body as { topicTitle: string; allTopics: { id: string; title: string }[] };
+  if (!topicTitle || !Array.isArray(allTopics) || allTopics.length === 0) {
+    return res.json({ related: [] });
+  }
+
+  const cacheKey = `related:${topicTitle}:${allTopics.length}`;
+  if (chatCache.has(cacheKey)) return res.json(JSON.parse(chatCache.get(cacheKey)!));
+
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+    const ai = new GoogleGenAI({ apiKey });
+
+    // Embed the source topic title and every candidate, then rank by cosine similarity.
+    const sourceEmbed = await generateEmbedding(topicTitle, ai);
+    if (!sourceEmbed.length) return res.json({ related: [] });
+
+    const scored: { id: string; title: string; score: number }[] = [];
+    for (const t of allTopics) {
+      if (t.title === topicTitle) continue;
+      const e = await generateEmbedding(t.title, ai);
+      if (e.length) scored.push({ id: t.id, title: t.title, score: cosineSimilarity(sourceEmbed, e) });
+      await new Promise(r => setTimeout(r, 60));
+    }
+    scored.sort((a, b) => b.score - a.score);
+    const result = { related: scored.slice(0, 4).filter(r => r.score > 0.55) };
+    chatCache.set(cacheKey, JSON.stringify(result));
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error in /api/related-topics:', error);
+    res.status(500).json({ error: error?.message || 'Error finding related topics.' });
+  }
+});
+
 // ─── Vite middleware setup ────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== "production") {
   const { createServer } = await import("vite");

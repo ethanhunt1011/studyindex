@@ -25,8 +25,21 @@ import {
   FileText,
   Target,
   Edit3,
+  BrainCircuit,
+  Network,
+  Star,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import {
+  XP,
+  levelFromXP,
+  xpProgressInLevel,
+  generateDailyQuests,
+  evaluateQuestProgress,
+  ACHIEVEMENTS,
+  type UserStats,
+  type DailyQuest,
+} from '../lib/gamification';
 
 // ─── Progress Ring (SVG circular progress) ───────────────────────────────────
 const ProgressRing = ({
@@ -189,6 +202,167 @@ const StudyNotesModal = ({ topic, onClose }: { topic: any; onClose: () => void }
                   <p className="text-sm text-yellow-900 font-medium leading-relaxed">{notes.memoryTip}</p>
                 </div>
               )}
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
+// ─── AI Mind Map Modal ───────────────────────────────────────────────────────
+// Generates a hierarchical concept map for a topic via /api/mind-map and
+// renders it as an SVG radial tree. Each branch is colour-rotated through a
+// fixed palette so the resulting diagram is genuinely glanceable.
+const MindMapModal = ({ topic, onClose }: { topic: any; onClose: () => void }) => {
+  const [data, setData] = React.useState<{ root: string; branches: { name: string; leaves: string[] }[] } | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/mind-map', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topicTitle: topic.title, context: topic.dailyExercise || '' }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error);
+        setData(d); setLoading(false);
+      })
+      .catch((err: any) => { setError(err.message || 'Failed to generate mind map'); setLoading(false); });
+  }, []);
+
+  // ── SVG layout ──────────────────────────────────────────────────────────────
+  const PALETTE = ['#5A5A40', '#8B7355', '#3F6B6E', '#7B4F3A', '#6B5A8B', '#4F8B6B'];
+  const W = 720, H = 560, CX = W / 2, CY = H / 2;
+  const branches = data?.branches || [];
+  const branchAngles = branches.map((_, i) => (i / branches.length) * 2 * Math.PI - Math.PI / 2);
+  const BRANCH_R = 170;
+  const LEAF_R = 90;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 overflow-y-auto py-8"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+          className="bg-white rounded-[40px] p-6 max-w-4xl w-full shadow-2xl relative"
+          onClick={e => e.stopPropagation()}
+        >
+          <button onClick={onClose} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 transition-colors z-10">
+            <X className="w-5 h-5 text-[#5A5A40]" />
+          </button>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-[#5A5A40] rounded-2xl flex items-center justify-center shrink-0">
+              <BrainCircuit className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg text-[#1A1A1A]">AI Mind Map</h2>
+              <p className="text-xs text-[#5A5A40]/60 truncate max-w-xs">{topic.title}</p>
+            </div>
+          </div>
+
+          {loading && (
+            <div className="py-16 flex flex-col items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-[#5A5A40]" />
+              <p className="text-sm text-[#5A5A40]/60">Building concept map…</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="py-8 text-center">
+              <p className="text-red-500 text-sm mb-4">{error}</p>
+              <button onClick={onClose} className="px-6 py-2 bg-gray-100 rounded-xl text-sm font-bold">Close</button>
+            </div>
+          )}
+
+          {data && !loading && (
+            <div className="w-full overflow-x-auto bg-gradient-to-br from-[#FAFAF5] to-[#F0F0E8] rounded-3xl p-4">
+              <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ minHeight: 400 }}>
+                {/* Branch lines (drawn first so they sit behind leaf circles) */}
+                {branches.map((branch, i) => {
+                  const angle = branchAngles[i];
+                  const bx = CX + Math.cos(angle) * BRANCH_R;
+                  const by = CY + Math.sin(angle) * BRANCH_R;
+                  const color = PALETTE[i % PALETTE.length];
+                  return (
+                    <g key={`b-${i}`}>
+                      <line x1={CX} y1={CY} x2={bx} y2={by} stroke={color} strokeWidth={2.5} opacity={0.6} />
+                      {(branch.leaves || []).map((_, li) => {
+                        const leafCount = branch.leaves.length;
+                        const leafSpread = Math.PI / 2.5;
+                        const leafAngle = angle - leafSpread / 2 + (leafCount > 1 ? (li / (leafCount - 1)) * leafSpread : leafSpread / 2);
+                        const lx = bx + Math.cos(leafAngle) * LEAF_R;
+                        const ly = by + Math.sin(leafAngle) * LEAF_R;
+                        return <line key={`l-${i}-${li}`} x1={bx} y1={by} x2={lx} y2={ly} stroke={color} strokeWidth={1.2} opacity={0.4} />;
+                      })}
+                    </g>
+                  );
+                })}
+
+                {/* Leaf nodes */}
+                {branches.map((branch, i) => {
+                  const angle = branchAngles[i];
+                  const bx = CX + Math.cos(angle) * BRANCH_R;
+                  const by = CY + Math.sin(angle) * BRANCH_R;
+                  const color = PALETTE[i % PALETTE.length];
+                  return (branch.leaves || []).map((leaf, li) => {
+                    const leafCount = branch.leaves.length;
+                    const leafSpread = Math.PI / 2.5;
+                    const leafAngle = angle - leafSpread / 2 + (leafCount > 1 ? (li / (leafCount - 1)) * leafSpread : leafSpread / 2);
+                    const lx = bx + Math.cos(leafAngle) * LEAF_R;
+                    const ly = by + Math.sin(leafAngle) * LEAF_R;
+                    return (
+                      <g key={`leaf-${i}-${li}`}>
+                        <circle cx={lx} cy={ly} r={5} fill={color} opacity={0.5} />
+                        <foreignObject x={lx - 60} y={ly + 8} width={120} height={40}>
+                          <div className="text-center text-[10px] font-medium text-[#5A5A40] leading-tight px-1">
+                            {leaf}
+                          </div>
+                        </foreignObject>
+                      </g>
+                    );
+                  });
+                })}
+
+                {/* Branch nodes (drawn after lines, before root) */}
+                {branches.map((branch, i) => {
+                  const angle = branchAngles[i];
+                  const bx = CX + Math.cos(angle) * BRANCH_R;
+                  const by = CY + Math.sin(angle) * BRANCH_R;
+                  const color = PALETTE[i % PALETTE.length];
+                  return (
+                    <g key={`bn-${i}`}>
+                      <circle cx={bx} cy={by} r={32} fill={color} opacity={0.18} />
+                      <circle cx={bx} cy={by} r={24} fill={color} />
+                      <foreignObject x={bx - 70} y={by - 10} width={140} height={28}>
+                        <div className="text-center text-[11px] font-bold text-white leading-tight px-2">
+                          {branch.name}
+                        </div>
+                      </foreignObject>
+                    </g>
+                  );
+                })}
+
+                {/* Root node */}
+                <circle cx={CX} cy={CY} r={60} fill="#1A1A1A" opacity={0.06} />
+                <circle cx={CX} cy={CY} r={48} fill="#1A1A1A" />
+                <foreignObject x={CX - 70} y={CY - 18} width={140} height={36}>
+                  <div className="text-center text-xs font-bold text-white leading-tight px-2 flex items-center justify-center h-full">
+                    {data.root}
+                  </div>
+                </foreignObject>
+              </svg>
+
+              <p className="text-[10px] text-[#5A5A40]/50 text-center mt-3">
+                Generated by Gemini · concept tree with {branches.length} branches · {branches.reduce((s, b) => s + (b.leaves?.length || 0), 0)} leaves
+              </p>
             </div>
           )}
         </motion.div>
@@ -590,7 +764,7 @@ const PracticeExamModal = ({
       setCurrentFeedback(null);
       setPhase('question');
     } else {
-      const total = Object.values(answers).reduce((s, a) => s + (a.score || 0), 0);
+      const total = (Object.values(answers) as any[]).reduce((s: number, a: any) => s + (a.score || 0), 0);
       const pct = Math.round((total / questions.length) * 100);
       setFinalScore(pct);
       onSaveResult({ topicId: topic.id, topicTitle: topic.title, score: pct, totalQuestions: questions.length });
@@ -840,6 +1014,7 @@ export const DashboardContent = ({
   handleSavePracticeResult,
   weeklyGoal,
   handleSaveWeeklyGoal,
+  userStats,
 }: any) => {
   const isDark = isDeepFocus || theme === 'dark';
 
@@ -848,6 +1023,8 @@ export const DashboardContent = ({
   const [practiceExamTopic, setPracticeExamTopic] = useState<any>(null);
   const [showStudyNotes, setShowStudyNotes] = useState(false);
   const [studyNotesTopic, setStudyNotesTopic] = useState<any>(null);
+  const [showMindMap, setShowMindMap] = useState(false);
+  const [mindMapTopic, setMindMapTopic] = useState<any>(null);
   const [drillCaughtUp, setDrillCaughtUp] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(weeklyGoal?.minutesPerWeek?.toString() || '120');
@@ -916,6 +1093,22 @@ export const DashboardContent = ({
   const todaySessions = (studySessions || []).filter((s: any) => s.date === todayStr);
   const todayMinutes = todaySessions.reduce((sum: number, s: any) => sum + (s.durationMinutes || 0), 0);
 
+  // ── Gamification: Level + Daily Quests ───────────────────────────────────
+  const stats: UserStats = userStats || { xp: 0, totalReviews: 0, totalExams: 0, perfectExams: 0, topicsMastered: 0, documentsUploaded: 0, studyBuddyMessages: 0, achievements: [], lastQuestRefreshDate: '', questsCompletedToday: [] };
+  const xpInfo = xpProgressInLevel(stats.xp);
+  const dailyQuests = generateDailyQuests(todayStr);
+  // Approximate today-only counters from sessions/practiceHistory/sm2 for quest progress
+  const todayReviewCount = Object.values(sm2Cards || {}).filter((c: any) => c.lastReviewed === todayStr).length;
+  const todayExamCount = ((typeof window !== 'undefined' && (window as any).__todayExams) || 0);
+  const masteryAt80 = Object.values(masteryData || {}).filter((m: any) => m.score >= 80).length;
+  const questCtx = {
+    todayReviews: todayReviewCount,
+    todayExams: todayExamCount,
+    todayMinutes,
+    todayChats: 0,
+    masteryAtOrAbove80: masteryAt80,
+  };
+
   return (
     <div className={cn(
       "min-h-screen transition-colors duration-1000",
@@ -946,6 +1139,13 @@ export const DashboardContent = ({
         <StudyNotesModal
           topic={studyNotesTopic}
           onClose={() => { setShowStudyNotes(false); setStudyNotesTopic(null); }}
+        />
+      )}
+
+      {showMindMap && mindMapTopic && (
+        <MindMapModal
+          topic={mindMapTopic}
+          onClose={() => { setShowMindMap(false); setMindMapTopic(null); }}
         />
       )}
 
@@ -1135,6 +1335,100 @@ export const DashboardContent = ({
           </div>
         </section>
 
+        {/* ── Level + XP Bar ──────────────────────────────────────────────── */}
+        <section className="mb-6">
+          <div className={cn(
+            "p-5 rounded-[28px] border relative overflow-hidden",
+            isDark ? "bg-gradient-to-br from-[#1A1A1A] to-[#0F0F0F] border-white/10" : "bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] border-transparent shadow-lg"
+          )}>
+            <div className="absolute -right-6 -top-6 opacity-10">
+              <Star className="w-32 h-32 text-yellow-400 fill-yellow-400" />
+            </div>
+            <div className="relative">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-yellow-400/20 backdrop-blur-sm flex items-center justify-center border border-yellow-400/30">
+                    <span className="text-xl font-black text-yellow-300">{xpInfo.level}</span>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">Level {xpInfo.level}</p>
+                    <p className="text-base font-bold text-white">{stats.xp.toLocaleString()} XP</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">Next</p>
+                  <p className="text-xs font-bold text-white/80">Level {xpInfo.nextLevel}</p>
+                </div>
+              </div>
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${xpInfo.pct * 100}%` }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                  className="h-full rounded-full bg-gradient-to-r from-yellow-300 to-amber-400"
+                />
+              </div>
+              <p className="text-[10px] text-white/50 mt-1.5 text-right">
+                {xpInfo.current.toLocaleString()} / {xpInfo.needed.toLocaleString()} XP
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Daily Quests ────────────────────────────────────────────────── */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={cn("text-sm font-bold uppercase tracking-widest", isDark ? "text-white/60" : "text-[#5A5A40]/70")}>
+              Today's Quests
+            </h3>
+            <span className={cn("text-[10px] font-bold uppercase tracking-widest", isDark ? "text-white/40" : "text-[#5A5A40]/40")}>
+              Resets at midnight
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {dailyQuests.map((q: DailyQuest) => {
+              const prog = evaluateQuestProgress(q, questCtx);
+              return (
+                <motion.div
+                  key={q.id}
+                  whileHover={{ y: -2 }}
+                  className={cn(
+                    "p-4 rounded-2xl border relative overflow-hidden",
+                    prog.complete
+                      ? (isDark ? "bg-green-900/20 border-green-500/30" : "bg-green-50 border-green-200")
+                      : (isDark ? "bg-[#1A1A1A] border-white/10" : "bg-white border-[#1A1A1A]/5 shadow-sm")
+                  )}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-2xl">{q.icon}</span>
+                    <span className={cn(
+                      "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                      prog.complete
+                        ? "bg-green-500 text-white"
+                        : (isDark ? "bg-yellow-400/20 text-yellow-300" : "bg-yellow-100 text-yellow-800")
+                    )}>
+                      {prog.complete ? '✓ Done' : `+${q.xp} XP`}
+                    </span>
+                  </div>
+                  <p className={cn("font-bold text-sm leading-tight", isDark ? "text-white" : "text-[#1A1A1A]")}>{q.title}</p>
+                  <p className={cn("text-xs mt-0.5 leading-snug", isDark ? "text-white/50" : "text-[#5A5A40]/60")}>{q.description}</p>
+                  <div className={cn("h-1 rounded-full overflow-hidden mt-2.5", isDark ? "bg-white/10" : "bg-gray-100")}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${prog.pct * 100}%` }}
+                      transition={{ duration: 0.8, ease: 'easeOut' }}
+                      className={cn("h-full rounded-full", prog.complete ? "bg-green-500" : "bg-[#5A5A40]")}
+                    />
+                  </div>
+                  <p className={cn("text-[10px] mt-1 tabular-nums text-right", isDark ? "text-white/40" : "text-[#5A5A40]/50")}>
+                    {prog.current} / {q.target}
+                  </p>
+                </motion.div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* ── Study Timer ──────────────────────────────────────────────────── */}
         <section className="mb-10">
           <motion.div
@@ -1310,6 +1604,17 @@ export const DashboardContent = ({
                         title="Practice Exam"
                       >
                         <GraduationCap className="w-4 h-4" />
+                      </button>
+                      {/* Mind Map button */}
+                      <button
+                        onClick={() => { setMindMapTopic(topic); setShowMindMap(true); }}
+                        className={cn(
+                          "p-2.5 rounded-full transition-colors",
+                          isDark ? "bg-white/10 hover:bg-white/20 text-pink-300" : "bg-pink-50 hover:bg-pink-100 text-pink-600"
+                        )}
+                        title="AI Mind Map"
+                      >
+                        <Network className="w-4 h-4" />
                       </button>
                       {/* Flashcard button */}
                       <button

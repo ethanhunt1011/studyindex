@@ -73,6 +73,8 @@ import {
   getPracticeHistory,
   saveWeeklyGoal,
   getWeeklyGoal,
+  saveUserStats,
+  getUserStats,
   StudySession,
   SM2Card,
   TopicMastery,
@@ -80,6 +82,14 @@ import {
   PracticeExamResult,
   WeeklyGoal,
 } from './lib/storage';
+import {
+  XP,
+  initialStats,
+  detectNewAchievements,
+  ACHIEVEMENTS,
+  type UserStats,
+  type Achievement,
+} from './lib/gamification';
 import type { Topic, Unit, Chapter, Flashcard } from './services/gemini';
 import { cn } from './lib/utils';
 import { Phone, Smartphone, ShieldAlert, Timer, Play, Pause, RotateCcw } from 'lucide-react';
@@ -174,6 +184,8 @@ export default function App() {
   const [examSettings, setExamSettings] = useState<ExamSettings | null>(null);
   const [practiceHistory, setPracticeHistory] = useState<PracticeExamResult[]>([]);
   const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
+  const [userStats, setUserStats] = useState<UserStats>(initialStats);
+  const [achievementToast, setAchievementToast] = useState<Achievement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatTime = (seconds: number) => {
@@ -205,6 +217,7 @@ export default function App() {
         return updated;
       });
       completeSession();
+      handlePomodoroComplete();
       // Reset timer for next session
       setTimerSeconds((profile?.focusTime || 25) * 60);
     }
@@ -259,7 +272,7 @@ export default function App() {
 
   useEffect(() => {
     const loadData = async () => {
-      const [localPlans, localProgress, localSessions, localScheduled, localSm2, localMastery, localExam, localPractice, localGoal] = await Promise.all([
+      const [localPlans, localProgress, localSessions, localScheduled, localSm2, localMastery, localExam, localPractice, localGoal, localStats] = await Promise.all([
         getLocalPlans(),
         getLocalProgress(),
         getStudySessions(),
@@ -269,6 +282,7 @@ export default function App() {
         getExamSettings(),
         getPracticeHistory(),
         getWeeklyGoal(),
+        getUserStats(),
       ]);
       if (localPlans) setPlans(localPlans);
       if (localProgress) setProgress(localProgress);
@@ -279,10 +293,52 @@ export default function App() {
       if (localExam) setExamSettings(localExam);
       if (localPractice && localPractice.length) setPracticeHistory(localPractice);
       if (localGoal) setWeeklyGoal(localGoal);
+      if (localStats) setUserStats({ ...initialStats(), ...localStats });
       setLoading(false);
     };
     loadData();
   }, []);
+
+  // ─── Gamification helper: award XP, then check & unlock achievements ───────
+  const awardXPAndCheckAchievements = useCallback((
+    xpDelta: number,
+    statsDelta: Partial<UserStats> = {}
+  ) => {
+    setUserStats(prev => {
+      const merged: UserStats = {
+        ...prev,
+        ...statsDelta,
+        xp: prev.xp + xpDelta,
+        // Numeric counters are *additive* if they were passed
+        totalReviews:       prev.totalReviews       + (statsDelta.totalReviews       ?? 0),
+        totalExams:         prev.totalExams         + (statsDelta.totalExams         ?? 0),
+        perfectExams:       prev.perfectExams       + (statsDelta.perfectExams       ?? 0),
+        documentsUploaded:  prev.documentsUploaded  + (statsDelta.documentsUploaded  ?? 0),
+        studyBuddyMessages: prev.studyBuddyMessages + (statsDelta.studyBuddyMessages ?? 0),
+      };
+      // Re-derive topicsMastered from current mastery data
+      merged.topicsMastered = Object.values(masteryData).filter((m: TopicMastery) => m.score >= 80).length;
+
+      // Detect newly-unlocked achievements
+      const totalMinutesToday = studySessions
+        .filter(s => s.date === new Date().toISOString().split('T')[0])
+        .reduce((sum, s) => sum + s.durationMinutes, 0);
+      const fresh = detectNewAchievements(merged, {
+        streak: profile?.streakCount || 0,
+        minutesStudied: totalMinutesToday,
+        mastery: masteryData,
+        sm2: sm2Cards,
+      });
+      if (fresh.length > 0) {
+        merged.achievements = [...merged.achievements, ...fresh.map(a => a.id)];
+        setAchievementToast(fresh[0]);
+        setTimeout(() => setAchievementToast(null), 5000);
+      }
+
+      saveUserStats(merged);
+      return merged;
+    });
+  }, [masteryData, profile, studySessions, sm2Cards]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -353,6 +409,7 @@ export default function App() {
           [newPlan.id]: { planId: newPlan.id, completedTopicIds: [], lastStudiedAt: new Date().toISOString() }
         }));
 
+        handleDocumentUploaded();
         setProcessing(false);
       } catch (err: any) {
         console.error('Upload error:', err);
@@ -523,6 +580,11 @@ export default function App() {
       saveAllSM2Cards(updated);
       return updated;
     });
+    // Award XP — review base + bonus for grade 5
+    awardXPAndCheckAchievements(
+      XP.REVIEW_CARD + (grade === 5 ? XP.REVIEW_PERFECT : 0),
+      { totalReviews: 1 }
+    );
     // Update mastery score (exponential moving average of grade/5)
     setMasteryData(prev => {
       const existing = prev[currentTopicId] ?? {
@@ -573,7 +635,32 @@ export default function App() {
       savePracticeHistory(updated);
       return updated;
     });
+    // Award XP based on exam score: base + pass bonus + perfect bonus
+    const isPerfect = result.score === 100;
+    const isPass    = result.score >= 70;
+    const xpDelta = XP.PRACTICE_EXAM
+                  + (isPass    ? XP.PRACTICE_EXAM_PASS : 0)
+                  + (isPerfect ? XP.PRACTICE_EXAM_PERF : 0);
+    awardXPAndCheckAchievements(xpDelta, {
+      totalExams:   1,
+      perfectExams: isPerfect ? 1 : 0,
+    });
   };
+
+  // Called when a chat message is sent in Study Buddy
+  const handleChatMessage = useCallback(() => {
+    awardXPAndCheckAchievements(XP.CHAT_MESSAGE, { studyBuddyMessages: 1 });
+  }, [awardXPAndCheckAchievements]);
+
+  // Called when a document is uploaded
+  const handleDocumentUploaded = useCallback(() => {
+    awardXPAndCheckAchievements(XP.UPLOAD_DOCUMENT, { documentsUploaded: 1 });
+  }, [awardXPAndCheckAchievements]);
+
+  // Called when a Pomodoro completes
+  const handlePomodoroComplete = useCallback(() => {
+    awardXPAndCheckAchievements(XP.POMODORO_COMPLETE);
+  }, [awardXPAndCheckAchievements]);
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!profile) return;
@@ -705,14 +792,43 @@ export default function App() {
               handleSavePracticeResult={handleSavePracticeResult}
               weeklyGoal={weeklyGoal}
               handleSaveWeeklyGoal={handleSaveWeeklyGoal}
+              userStats={userStats}
             />
           } />
-          <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} masteryData={masteryData} examSettings={examSettings} handleSaveExamSettings={handleSaveExamSettings} practiceHistory={practiceHistory} sm2Cards={sm2Cards} />} />
+          <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} masteryData={masteryData} examSettings={examSettings} handleSaveExamSettings={handleSaveExamSettings} practiceHistory={practiceHistory} sm2Cards={sm2Cards} userStats={userStats} />} />
           <Route path="/rooms" element={<StudyRooms />} />
-          <Route path="/buddy" element={<StudyBuddy fileId={fileId} />} />
-          <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} />} />
+          <Route path="/buddy" element={<StudyBuddy fileId={fileId} onMessageSent={handleChatMessage} />} />
+          <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} userStats={userStats} masteryData={masteryData} studySessions={studySessions} />} />
         </Routes>
       </Layout>
+
+      {/* Achievement Toast */}
+      <AnimatePresence>
+        {achievementToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 20 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] bg-gradient-to-br from-[#5A5A40] to-[#3A3A28] text-white rounded-3xl px-5 py-4 shadow-2xl flex items-center gap-3 max-w-sm w-[calc(100%-2rem)] cursor-pointer"
+            onClick={() => setAchievementToast(null)}
+          >
+            <span className="text-3xl shrink-0">{achievementToast.icon}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Achievement Unlocked</p>
+              <p className="font-bold text-base leading-tight">{achievementToast.title}</p>
+              <p className="text-xs text-white/70 mt-0.5">{achievementToast.description}</p>
+            </div>
+            <span className={cn(
+              'text-[9px] font-bold uppercase px-2 py-1 rounded-md tracking-wider shrink-0',
+              achievementToast.rarity === 'legendary' ? 'bg-yellow-400 text-yellow-900' :
+              achievementToast.rarity === 'epic'      ? 'bg-purple-400 text-purple-900' :
+              achievementToast.rarity === 'rare'      ? 'bg-blue-400 text-blue-900' :
+                                                        'bg-white/20 text-white'
+            )}>{achievementToast.rarity}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </BrowserRouter>
   );
 }
