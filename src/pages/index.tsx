@@ -127,8 +127,9 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
         <p className="text-sm text-[#5A5A40]/60 mt-1">Track your study progress over time</p>
       </div>
 
+
       {/* ── Exam Readiness Predictor — always visible ──────────────────────── */}
-      <div className={cn("bg-white rounded-[32px] border shadow-sm p-6", examSettings?.examDate ? readinessBg : "border-gray-100")}>
+      <div className={cn("rounded-[32px] shadow-md shadow-black/5 p-6", examSettings?.examDate ? readinessBg : "bg-white")}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-[#5A5A40]" />
@@ -259,19 +260,19 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
                 key={stat.label}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-5"
+                className="bg-white rounded-[24px] shadow-md shadow-black/5 p-5 border-0"
               >
-                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center mb-3", stat.color)}>
+                <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center mb-3 shadow-sm", stat.color)}>
                   {stat.icon}
                 </div>
-                <div className="text-2xl font-serif font-bold text-[#1A1A1A]">{stat.value}</div>
+                <div className="text-3xl font-serif font-bold text-[#1A1A1A]">{stat.value}</div>
                 <div className="text-xs text-[#5A5A40]/60 font-medium mt-0.5">{stat.label} · {stat.sub}</div>
               </motion.div>
             ))}
           </div>
 
           {/* ── Weekly bar chart ─────────────────────────────────────────────── */}
-          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+          <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
             <h2 className="font-bold text-[#1A1A1A] mb-5">Focus Minutes — Last 7 Days</h2>
             <div className="flex items-end gap-2 h-32">
               {days.map((day) => {
@@ -289,7 +290,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
                         transition={{ duration: 0.6, delay: 0.05, ease: 'easeOut' }}
                         className={cn(
                           "w-full rounded-t-lg min-h-0",
-                          isToday ? "bg-[#5A5A40]" : day.minutes > 0 ? "bg-[#5A5A40]/40" : "bg-gray-100"
+                          isToday ? "bg-gradient-to-t from-[#5A5A40] to-[#8A8A60]" : day.minutes > 0 ? "bg-[#5A5A40]/40" : "bg-gray-100"
                         )}
                         style={{ minHeight: day.minutes > 0 ? '4px' : '2px' }}
                       />
@@ -304,7 +305,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
           </div>
 
           {/* ── Study Activity Heatmap ──────────────────────────────────────── */}
-          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+          <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
             <h2 className="font-bold text-[#1A1A1A] mb-5">Study Activity — Last 63 Days</h2>
             <div className="flex gap-1 overflow-x-auto pb-1">
               {Array.from({ length: 9 }, (_, weekIdx) => (
@@ -335,7 +336,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
 
           {/* ── Plan progress ─────────────────────────────────────────────────── */}
           {plans.length > 0 && (
-            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
               <h2 className="font-bold text-[#1A1A1A] mb-5">Plan Progress</h2>
               <div className="space-y-4">
                 {plans.map((plan: any) => {
@@ -366,7 +367,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
 
           {/* ── Knowledge Map ────────────────────────────────────────────────── */}
           {plans.length > 0 && (
-            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
               <div className="flex items-center gap-2 mb-5">
                 <BookOpen className="w-5 h-5 text-[#5A5A40]" />
                 <h2 className="font-bold text-[#1A1A1A]">Knowledge Map</h2>
@@ -440,7 +441,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
 
           {/* ── Forgetting Curve / Retention ──────────────────────────────────── */}
           {forgettingData.length > 0 && (
-            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-5 h-5 text-[#5A5A40]" />
                 <h2 className="font-bold text-[#1A1A1A]">Forgetting Curve</h2>
@@ -479,7 +480,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
 
           {/* ── Practice Exam History ─────────────────────────────────────────── */}
           {practiceHistory.length > 0 && (
-            <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
               <div className="flex items-center gap-2 mb-5">
                 <GraduationCap className="w-5 h-5 text-[#5A5A40]" />
                 <h2 className="font-bold text-[#1A1A1A]">Practice Exam History</h2>
@@ -503,7 +504,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
           )}
 
           {/* ── Motivational quote ────────────────────────────────────────────── */}
-          <div className="bg-[#5A5A40] rounded-[32px] p-6 text-white">
+          <div className="bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] rounded-[32px] p-6 text-white shadow-lg shadow-[#5A5A40]/20">
             <p className="font-serif text-lg italic leading-relaxed">"{quote.text}"</p>
             <p className="text-sm text-white/60 mt-3 font-medium">— {quote.author}</p>
           </div>
@@ -512,9 +513,11 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
       )}
 
       {/* ── AI Stack — always visible ─────────────────────────────────────────── */}
-      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <BrainCircuit className="w-5 h-5 text-[#5A5A40]" />
+      <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#5A5A40]/10 to-[#5A5A40]/5 flex items-center justify-center">
+            <BrainCircuit className="w-5 h-5 text-[#5A5A40]" />
+          </div>
           <h2 className="font-bold text-[#1A1A1A]">AI Under the Hood</h2>
         </div>
         <div className="space-y-3">
@@ -625,7 +628,7 @@ export const StudyRooms = () => {
       </div>
 
       {/* Coming soon hero */}
-      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-8 text-center">
+      <div className="bg-gradient-to-br from-white to-[#F5F5F0] rounded-[32px] shadow-md shadow-black/5 p-8 text-center">
         <div className="w-16 h-16 bg-[#5A5A40]/10 rounded-[20px] flex items-center justify-center mx-auto mb-4">
           <Users className="w-8 h-8 text-[#5A5A40]" />
         </div>
@@ -638,7 +641,7 @@ export const StudyRooms = () => {
       {/* Preview features */}
       <div className="grid grid-cols-2 gap-4">
         {features.map((f) => (
-          <div key={f.title} className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-5">
+          <div key={f.title} className="bg-white rounded-[24px] shadow-md shadow-black/5 p-5">
             <div className="text-2xl mb-2">{f.icon}</div>
             <h3 className="font-bold text-sm text-[#1A1A1A]">{f.title}</h3>
             <p className="text-xs text-[#5A5A40]/60 mt-1">{f.desc}</p>
@@ -647,7 +650,7 @@ export const StudyRooms = () => {
       </div>
 
       {/* Share study plan */}
-      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+      <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
         <div className="flex items-center gap-3 mb-4">
           <Share2 className="w-5 h-5 text-[#5A5A40]" />
           <h2 className="font-bold text-[#1A1A1A]">Share Your Progress</h2>
@@ -673,7 +676,7 @@ export const StudyRooms = () => {
       </div>
 
       {/* Join room */}
-      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+      <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
         <h2 className="font-bold text-[#1A1A1A] mb-4">Join a Room</h2>
         <p className="text-sm text-[#5A5A40]/60 mb-4">Got an invite code? Enter it below.</p>
         <div className="flex gap-2">
@@ -893,11 +896,11 @@ export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; o
   return (
     <div className="max-w-5xl mx-auto flex h-[calc(100vh-64px)] gap-6 flex-col md:flex-row p-4 md:p-0">
       {/* Sidebar for chat history */}
-      <div className="w-full md:w-64 bg-white rounded-[32px] shadow-sm border border-gray-100 flex flex-col shrink-0 md:h-full max-h-[300px] md:max-h-none overflow-hidden">
-        <div className="p-4 border-b border-gray-100">
-          <button 
+      <div className="w-full md:w-64 bg-white rounded-[32px] shadow-md shadow-black/5 flex flex-col shrink-0 md:h-full max-h-[300px] md:max-h-none overflow-hidden">
+        <div className="p-4 border-b border-gray-50">
+          <button
             onClick={createNewChat}
-            className="w-full flex items-center justify-center gap-2 bg-[#5A5A40] text-white p-3 rounded-xl font-bold hover:bg-[#4A4A30] transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#5A5A40] to-[#4A4A30] text-white p-3 rounded-xl font-bold hover:opacity-90 transition-opacity shadow-md shadow-[#5A5A40]/20"
           >
             <Plus className="w-5 h-5" />
             New Chat
@@ -909,8 +912,8 @@ export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; o
               key={chat.id}
               onClick={() => setCurrentChatId(chat.id)}
               className={cn(
-                "p-3 rounded-xl cursor-pointer flex items-center justify-between group transition-colors",
-                currentChatId === chat.id ? "bg-orange-50 text-orange-900" : "hover:bg-gray-50 text-gray-600"
+                "p-3 rounded-xl cursor-pointer flex items-center justify-between group transition-all",
+                currentChatId === chat.id ? "bg-gradient-to-r from-[#5A5A40]/10 to-[#5A5A40]/5 text-[#1A1A1A] shadow-sm" : "hover:bg-gray-50 text-gray-600"
               )}
             >
               <div className="flex items-center gap-2 overflow-hidden">
@@ -929,13 +932,18 @@ export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; o
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden h-[500px] md:h-full">
-        <div className="p-4 md:p-6 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl md:text-2xl font-serif font-bold">Study Buddy</h1>
-            <p className="text-[10px] text-[#5A5A40]/50 font-semibold uppercase tracking-widest mt-0.5">
-              Gemini 2.5 Flash · RAG Pipeline
-            </p>
+      <div className="flex-1 flex flex-col bg-white rounded-[32px] shadow-md shadow-black/5 overflow-hidden h-[500px] md:h-full">
+        <div className="p-4 md:p-5 border-b border-gray-50 flex items-center justify-between bg-gradient-to-r from-white to-[#F5F5F0]/50">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] flex items-center justify-center shadow-sm shrink-0">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-base md:text-lg font-bold text-[#1A1A1A]">Study Buddy</h1>
+              <p className="text-[10px] text-[#5A5A40]/50 font-semibold uppercase tracking-widest">
+                Gemini 2.5 Flash · RAG
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {ragInfo?.enabled && (
@@ -988,7 +996,7 @@ export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; o
             messages.map((m, i) => (
               <div key={i} className={cn(
                 "p-4 rounded-2xl whitespace-pre-wrap max-w-[85%] text-sm md:text-base shadow-sm",
-                m.role === 'user' ? "bg-[#5A5A40] text-white ml-auto rounded-tr-sm" : "bg-white border border-gray-100 mr-auto rounded-tl-sm"
+                m.role === 'user' ? "bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] text-white ml-auto rounded-tr-sm" : "bg-gradient-to-br from-[#F5F5F0] to-[#EEEEE8] border border-gray-100 mr-auto rounded-tl-sm"
               )}>
                 {m.text}
               </div>
@@ -1050,7 +1058,7 @@ export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; o
             <button
               onClick={handleSendMessage}
               disabled={loading || !input.trim()}
-              className="bg-[#5A5A40] text-white p-4 rounded-2xl font-bold hover:bg-[#4A4A30] transition-colors disabled:opacity-50 shrink-0 shadow-md active:scale-95"
+              className="bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] text-white p-4 rounded-2xl font-bold hover:opacity-90 transition-all disabled:opacity-40 shrink-0 shadow-md shadow-[#5A5A40]/25 active:scale-95"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                 <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
@@ -1090,63 +1098,80 @@ export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, m
 
   return (
     <div className={cn("p-6 max-w-2xl mx-auto min-h-screen transition-colors duration-300", theme === 'dark' ? "bg-[#0A0A0A] text-white" : "bg-[#F5F5F0] text-[#1A1A1A]")}>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-serif font-bold">Settings</h1>
-        <button onClick={handleSave} className="bg-[#5A5A40] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-[#4A4A30] transition-colors">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-serif font-bold">Settings</h1>
+          <p className={cn("text-sm mt-0.5", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Customize your study experience</p>
+        </div>
+        <button onClick={handleSave} className="bg-gradient-to-r from-[#5A5A40] to-[#4A4A30] text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity shadow-md shadow-[#5A5A40]/20">
           Save Changes
         </button>
       </div>
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Theme */}
-        <div className={cn("p-6 rounded-[32px] shadow-sm border flex items-center justify-between", theme === 'dark' ? "bg-[#1A1A1A] border-white/10" : "bg-white border-gray-100")}>
-          <h2 className="text-lg font-bold">Theme</h2>
-          <div className="flex gap-2">
-            <button onClick={() => setTheme('day')} className={`px-4 py-2 rounded-xl ${theme === 'day' ? 'bg-[#5A5A40] text-white' : 'bg-gray-100'}`}>Day</button>
-            <button onClick={() => setTheme('dark')} className={`px-4 py-2 rounded-xl ${theme === 'dark' ? 'bg-[#5A5A40] text-white' : 'bg-gray-100'}`}>Dark</button>
+        <div className={cn("p-6 rounded-[32px] shadow-md shadow-black/5 flex items-center justify-between", theme === 'dark' ? "bg-[#1A1A1A]" : "bg-white")}>
+          <div>
+            <h2 className="text-base font-bold">Appearance</h2>
+            <p className={cn("text-xs mt-0.5", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Choose your preferred theme</p>
+          </div>
+          <div className="flex gap-2 p-1 rounded-xl bg-gray-100">
+            <button onClick={() => setTheme('day')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${theme === 'day' ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>☀️ Day</button>
+            <button onClick={() => setTheme('dark')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${theme === 'dark' ? 'bg-[#1A1A1A] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>🌙 Dark</button>
           </div>
         </div>
-        
+
         {/* Focus & Reminders */}
-        <div className={cn("p-6 rounded-[32px] shadow-sm border space-y-4", theme === 'dark' ? "bg-[#1A1A1A] border-white/10" : "bg-white border-gray-100")}>
-          <h2 className="text-lg font-bold">Focus & Reminders</h2>
+        <div className={cn("p-6 rounded-[32px] shadow-md shadow-black/5 space-y-5", theme === 'dark' ? "bg-[#1A1A1A]" : "bg-white")}>
+          <h2 className="text-base font-bold">Focus & Reminders</h2>
           <div className="flex items-center justify-between">
-            <span>Focus Duration (min)</span>
-            <input type="number" value={focusTime} onChange={(e) => setFocusTime(Number(e.target.value))} className={cn("w-20 p-2 rounded-xl border", theme === 'dark' ? "bg-[#0A0A0A] border-white/20" : "bg-white border-gray-200")} />
+            <div>
+              <p className="text-sm font-medium">Focus Duration</p>
+              <p className={cn("text-xs", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Minutes per Pomodoro session</p>
+            </div>
+            <input type="number" value={focusTime} onChange={(e) => setFocusTime(Number(e.target.value))} className={cn("w-20 p-2 rounded-xl border text-center font-bold text-sm", theme === 'dark' ? "bg-[#0A0A0A] border-white/20 text-white" : "bg-[#F5F5F0] border-transparent text-[#1A1A1A]")} />
           </div>
           <div className="flex items-center justify-between">
-            <span>Reminder Time</span>
-            <input type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} className={cn("p-2 rounded-xl border", theme === 'dark' ? "bg-[#0A0A0A] border-white/20" : "bg-white border-gray-200")} />
+            <div>
+              <p className="text-sm font-medium">Daily Reminder</p>
+              <p className={cn("text-xs", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Local notification time</p>
+            </div>
+            <input type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} className={cn("p-2 rounded-xl border text-sm font-medium", theme === 'dark' ? "bg-[#0A0A0A] border-white/20 text-white" : "bg-[#F5F5F0] border-transparent text-[#1A1A1A]")} />
           </div>
           <div className="flex items-center justify-between">
-            <span>Focus Sounds</span>
-            <button onClick={() => setFocusSound(!focusSound)} className={`px-4 py-2 rounded-xl ${focusSound ? 'bg-[#5A5A40] text-white' : 'bg-gray-100'}`}>
-              {focusSound ? 'On' : 'Off'}
+            <div>
+              <p className="text-sm font-medium">Focus Sounds</p>
+              <p className={cn("text-xs", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Ambient audio while studying</p>
+            </div>
+            <button onClick={() => setFocusSound(!focusSound)} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${focusSound ? 'bg-gradient-to-r from-[#5A5A40] to-[#4A4A30] text-white shadow-sm' : theme === 'dark' ? 'bg-white/10 text-white/60' : 'bg-gray-100 text-gray-500'}`}>
+              {focusSound ? '🎵 On' : 'Off'}
             </button>
           </div>
         </div>
-        
+
         {/* Topic Customization */}
-        <div className={cn("p-6 rounded-[32px] shadow-sm border", theme === 'dark' ? "bg-[#1A1A1A] border-white/10" : "bg-white border-gray-100")}>
-          <h2 className="text-lg font-bold mb-4">Topic Customization</h2>
-          <p className={cn("text-sm mb-4", theme === 'dark' ? "text-gray-400" : "text-gray-500")}>Manage your study topics and priorities here.</p>
+        <div className={cn("p-6 rounded-[32px] shadow-md shadow-black/5", theme === 'dark' ? "bg-[#1A1A1A]" : "bg-white")}>
+          <h2 className="text-base font-bold mb-1">Daily Topics</h2>
+          <p className={cn("text-xs mb-5", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>How many topics to tackle each day</p>
           <div className="flex items-center justify-between">
-            <span>Topics for the Day</span>
-            <input type="number" min="1" max="10" value={topicsForDay} onChange={(e) => setTopicsForDay(Number(e.target.value))} className={cn("w-20 p-2 rounded-xl border", theme === 'dark' ? "bg-[#0A0A0A] border-white/20" : "bg-white border-gray-200")} />
+            <span className="text-sm font-medium">Topics per Day</span>
+            <input type="number" min="1" max="10" value={topicsForDay} onChange={(e) => setTopicsForDay(Number(e.target.value))} className={cn("w-20 p-2 rounded-xl border text-center font-bold text-sm", theme === 'dark' ? "bg-[#0A0A0A] border-white/20 text-white" : "bg-[#F5F5F0] border-transparent text-[#1A1A1A]")} />
           </div>
         </div>
 
         {/* ── Achievements Gallery ──────────────────────────────────────── */}
-        <div className={cn("p-6 rounded-[32px] shadow-sm border", theme === 'dark' ? "bg-[#1A1A1A] border-white/10" : "bg-white border-gray-100")}>
-          <div className="flex items-center justify-between mb-4">
+        <div className={cn("p-6 rounded-[32px] shadow-md shadow-black/5", theme === 'dark' ? "bg-[#1A1A1A]" : "bg-white")}>
+          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-yellow-500" />
-              <h2 className="text-lg font-bold">Achievements</h2>
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-yellow-100 to-amber-200 flex items-center justify-center">
+                <Award className="w-4 h-4 text-yellow-600" />
+              </div>
+              <h2 className="text-base font-bold">Achievements</h2>
             </div>
-            <span className={cn("text-xs font-bold px-2 py-1 rounded-md", theme === 'dark' ? "bg-white/10 text-white/70" : "bg-gray-100 text-[#5A5A40]")}>
-              {(userStats?.achievements?.length || 0)} / {ACHIEVEMENTS.length}
+            <span className={cn("text-xs font-bold px-3 py-1.5 rounded-lg", theme === 'dark' ? "bg-white/10 text-white/70" : "bg-[#5A5A40]/10 text-[#5A5A40]")}>
+              {(userStats?.achievements?.length || 0)} / {ACHIEVEMENTS.length} unlocked
             </span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {ACHIEVEMENTS.map(a => {
               const unlocked = userStats?.achievements?.includes(a.id);
               return (
@@ -1154,17 +1179,17 @@ export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, m
                   key={a.id}
                   title={`${a.title} — ${a.description}`}
                   className={cn(
-                    "aspect-square rounded-2xl flex flex-col items-center justify-center p-2 text-center transition-all relative overflow-hidden border",
+                    "aspect-square rounded-2xl flex flex-col items-center justify-center p-2 text-center transition-all relative overflow-hidden",
                     unlocked
-                      ? a.rarity === 'legendary' ? 'bg-gradient-to-br from-yellow-200 to-amber-300 border-yellow-400 shadow-md'
-                      : a.rarity === 'epic'      ? 'bg-gradient-to-br from-purple-100 to-purple-200 border-purple-300'
-                      : a.rarity === 'rare'      ? 'bg-gradient-to-br from-blue-100 to-blue-200 border-blue-300'
-                                                  : 'bg-gradient-to-br from-gray-100 to-gray-200 border-gray-300'
-                      : (theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200 grayscale opacity-50')
+                      ? a.rarity === 'legendary' ? 'bg-gradient-to-br from-yellow-200 to-amber-300 shadow-md shadow-amber-200 scale-100 hover:scale-105'
+                      : a.rarity === 'epic'      ? 'bg-gradient-to-br from-purple-100 to-purple-200 shadow-sm shadow-purple-100 hover:scale-105'
+                      : a.rarity === 'rare'      ? 'bg-gradient-to-br from-blue-100 to-sky-200 shadow-sm shadow-blue-100 hover:scale-105'
+                                                  : 'bg-gradient-to-br from-gray-100 to-gray-200 shadow-sm hover:scale-105'
+                      : (theme === 'dark' ? 'bg-white/5' : 'bg-gray-50 grayscale opacity-40')
                   )}
                 >
                   <span className="text-2xl mb-0.5">{unlocked ? a.icon : '🔒'}</span>
-                  <p className={cn("text-[9px] font-bold uppercase tracking-wide leading-tight", unlocked ? 'text-[#1A1A1A]' : (theme === 'dark' ? 'text-white/40' : 'text-gray-500'))}>
+                  <p className={cn("text-[9px] font-bold uppercase tracking-wide leading-tight", unlocked ? 'text-[#1A1A1A]' : (theme === 'dark' ? 'text-white/30' : 'text-gray-400'))}>
                     {a.title}
                   </p>
                 </div>
@@ -1174,7 +1199,7 @@ export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, m
         </div>
 
         {/* ── Shareable Progress Card ───────────────────────────────────── */}
-        <div className={cn("p-6 rounded-[32px] shadow-sm border", theme === 'dark' ? "bg-[#1A1A1A] border-white/10" : "bg-white border-gray-100")}>
+        <div className={cn("p-6 rounded-[32px] shadow-md shadow-black/5", theme === 'dark' ? "bg-[#1A1A1A]" : "bg-white")}>
           <div className="flex items-center gap-2 mb-2">
             <Share2 className="w-5 h-5 text-[#5A5A40]" />
             <h2 className="text-lg font-bold">Share Your Progress</h2>

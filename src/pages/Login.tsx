@@ -107,10 +107,11 @@ export const Login = ({ onGuestMode }: LoginProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center px-6 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-[#F5F5F0] via-[#EEEEE6] to-[#F0F0E8] flex flex-col items-center justify-center px-6 relative overflow-hidden">
       {/* Decorative background blobs */}
-      <div className="absolute top-[-80px] right-[-80px] w-64 h-64 rounded-full bg-[#5A5A40]/5 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-[-80px] left-[-80px] w-64 h-64 rounded-full bg-[#5A5A40]/5 blur-3xl pointer-events-none" />
+      <div className="absolute top-[-80px] right-[-80px] w-80 h-80 rounded-full bg-[#5A5A40]/8 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-[-80px] left-[-80px] w-80 h-80 rounded-full bg-[#5A5A40]/8 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-white/40 blur-3xl pointer-events-none" />
 
       {/* Invisible reCAPTCHA mount point */}
       <div id="recaptcha-container" />
@@ -119,7 +120,7 @@ export const Login = ({ onGuestMode }: LoginProps) => {
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-sm"
+        className="w-full max-w-sm relative z-10"
       >
         {/* Brand header */}
         <div className="text-center mb-10">
@@ -127,7 +128,7 @@ export const Login = ({ onGuestMode }: LoginProps) => {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
-            className="w-20 h-20 bg-[#5A5A40] rounded-[24px] flex items-center justify-center mx-auto mb-5 shadow-xl"
+            className="w-20 h-20 bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] rounded-[24px] flex items-center justify-center mx-auto mb-5 shadow-xl shadow-[#5A5A40]/30"
           >
             <BookOpen className="w-10 h-10 text-white" />
           </motion.div>
@@ -150,7 +151,7 @@ export const Login = ({ onGuestMode }: LoginProps) => {
               <button
                 onClick={handleGoogleSignIn}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 bg-white border border-[#1A1A1A]/10 text-[#1A1A1A] p-4 rounded-2xl font-semibold shadow-sm hover:shadow-md transition-all active:scale-[0.98] disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-3 bg-white border border-[#1A1A1A]/10 text-[#1A1A1A] p-4 rounded-2xl font-semibold shadow-md shadow-black/5 hover:shadow-lg hover:-translate-y-0.5 transition-all active:scale-[0.98] disabled:opacity-50"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin text-[#5A5A40]" />
@@ -168,7 +169,7 @@ export const Login = ({ onGuestMode }: LoginProps) => {
               {/* Phone */}
               <button
                 onClick={() => { setStep('phone'); setError(null); }}
-                className="w-full flex items-center justify-center gap-3 bg-[#5A5A40] text-white p-4 rounded-2xl font-semibold hover:bg-[#4A4A30] transition-all active:scale-[0.98] shadow-sm"
+                className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-[#5A5A40] to-[#4A4A30] text-white p-4 rounded-2xl font-semibold hover:opacity-90 hover:-translate-y-0.5 transition-all active:scale-[0.98] shadow-md shadow-[#5A5A40]/25"
               >
                 <Phone className="w-5 h-5" />
                 Continue with Phone

@@ -19,7 +19,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const close = () => setIsSidebarOpen(false);
 
   return (
-    <div className="flex min-h-screen bg-[#F5F5F0] overflow-hidden relative">
+    <div className="flex min-h-screen bg-gradient-to-br from-[#F5F5F0] to-[#EEEEE6] overflow-hidden relative">
 
       {/* ── Mobile hamburger ─────────────────────────────────────── */}
       <button
@@ -51,14 +51,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
       {/* ── Sidebar ──────────────────────────────────────────────── */}
       <nav className={cn(
-        "fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-[#1A1A1A]/8 p-6 flex flex-col",
+        "fixed inset-y-0 left-0 z-40 w-64 bg-white/95 backdrop-blur-md border-r border-[#1A1A1A]/5 p-6 flex flex-col",
         "transform transition-transform duration-300 ease-in-out",
-        "md:relative md:translate-x-0 shadow-2xl md:shadow-none",
+        "md:relative md:translate-x-0 shadow-xl shadow-black/5 md:shadow-none",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Logo */}
         <div className="flex items-center gap-2.5 mb-10 mt-2 md:mt-0 pl-10 md:pl-0">
-          <div className="w-8 h-8 bg-[#5A5A40] rounded-[10px] flex items-center justify-center shadow-sm shrink-0">
+          <div className="w-8 h-8 bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] rounded-[10px] flex items-center justify-center shadow-md shadow-[#5A5A40]/30 shrink-0">
             <BookOpen className="w-4 h-4 text-white" />
           </div>
           <span className="text-xl font-serif font-bold text-[#1A1A1A] tracking-tight">StudyIndex</span>
@@ -83,7 +83,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 {isActive && (
                   <motion.div
                     layoutId="nav-pill"
-                    className="absolute inset-0 bg-[#5A5A40] rounded-xl"
+                    className="absolute inset-0 bg-gradient-to-r from-[#5A5A40] to-[#4A4A30] rounded-xl shadow-md shadow-[#5A5A40]/20"
                     transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                   />
                 )}

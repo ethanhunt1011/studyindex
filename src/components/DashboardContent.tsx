@@ -782,7 +782,7 @@ const PracticeExamModal = ({
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-          className="bg-white rounded-[40px] p-8 max-w-md w-full shadow-2xl relative"
+          className="bg-white rounded-[40px] p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto"
           onClick={e => e.stopPropagation()}
         >
           <button onClick={onClose} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 transition-colors">
@@ -1250,11 +1250,11 @@ export const DashboardContent = ({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 rounded-2xl shrink-0 font-semibold text-sm",
-                  isDark ? "bg-white/10 text-white" : stat.color
+                  "flex items-center gap-3 px-5 py-3 rounded-2xl shrink-0 font-semibold text-sm border shadow-sm",
+                  isDark ? "bg-white/10 text-white border-white/10" : stat.color + " border-transparent"
                 )}
               >
-                {stat.icon}
+                <div className="p-1.5 rounded-lg bg-white/60">{stat.icon}</div>
                 <div>
                   <div className="text-xs font-medium opacity-60 leading-none mb-0.5">{stat.label}</div>
                   <div className="font-bold leading-none">{stat.value}</div>
@@ -1558,9 +1558,11 @@ export const DashboardContent = ({
                   key={topic.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
+                  whileHover={{ y: -2 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
                   className={cn(
-                    "p-6 rounded-[32px] shadow-sm border transition-colors",
-                    isDark ? "bg-[#1A1A1A] border-white/10" : "bg-white border-[#1A1A1A]/5"
+                    "p-6 rounded-[32px] shadow-md shadow-black/5 border-0 border-l-4 transition-all hover:-translate-y-0.5",
+                    isDark ? "bg-[#1A1A1A] border-l-[#5A5A40]" : "bg-white border-l-[#5A5A40]"
                   )}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -1678,8 +1680,8 @@ export const DashboardContent = ({
                 <div
                   key={topic.id}
                   className={cn(
-                    "p-5 rounded-[28px] border flex items-center justify-between",
-                    isDark ? "bg-[#1A1A1A] border-white/5" : "bg-green-50/60 border-green-100"
+                    "p-5 rounded-[28px] flex items-center justify-between border-l-4",
+                    isDark ? "bg-[#1A1A1A] border-l-green-800" : "bg-green-50/80 border-l-green-500 shadow-sm shadow-green-100"
                   )}
                 >
                   <div>
@@ -1761,8 +1763,8 @@ export const DashboardContent = ({
         <section className="mb-10">
           <div
             className={cn(
-              "border-2 border-dashed rounded-[32px] p-12 text-center transition-all cursor-pointer",
-              isDark ? "border-white/20 hover:border-white/40 bg-white/5" : "border-[#5A5A40]/20 hover:border-[#5A5A40]/40 hover:bg-[#5A5A40]/5",
+              "border-2 border-dashed rounded-[32px] p-12 text-center transition-all cursor-pointer group",
+              isDark ? "border-white/20 hover:border-white/40 bg-white/5" : "border-[#5A5A40]/20 hover:border-[#5A5A40]/50 hover:bg-gradient-to-b hover:from-[#5A5A40]/5 hover:to-transparent",
               processing ? "opacity-50 pointer-events-none" : ""
             )}
             onClick={() => fileInputRef.current?.click()}
@@ -1771,7 +1773,7 @@ export const DashboardContent = ({
             {processing ? (
               <Loader2 className={cn("w-10 h-10 mx-auto animate-spin", isDark ? "text-white" : "text-[#5A5A40]")} />
             ) : (
-              <Upload className={cn("w-10 h-10 mx-auto mb-4", isDark ? "text-white" : "text-[#5A5A40]")} />
+              <Upload className={cn("w-10 h-10 mx-auto mb-4 transition-transform group-hover:scale-110", isDark ? "text-white" : "text-[#5A5A40]")} />
             )}
             <h3 className={cn("font-bold mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
               {fileId ? 'File Uploaded ✓' : 'Upload Study Material'}
@@ -1795,7 +1797,7 @@ export const DashboardContent = ({
                 const pct = totalTopics > 0 ? Math.round((completedCount / totalTopics) * 100) : 0;
 
                 return (
-                  <div key={plan.id} className={cn("p-6 md:p-8 rounded-[40px] shadow-sm border", isDark ? "bg-[#1A1A1A] border-white/10" : "bg-white border-[#1A1A1A]/5")}>
+                  <div key={plan.id} className={cn("p-6 md:p-8 rounded-[40px] shadow-lg shadow-black/5 border-0", isDark ? "bg-[#1A1A1A]" : "bg-white")}>
                     {/* Plan header */}
                     <div className="flex items-start justify-between mb-3">
                       <div>
