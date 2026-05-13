@@ -282,16 +282,19 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
     const fileParts = fileToContentParts(content, mimeType);
     const contents: any[] = [
       ...fileParts,
-      { text: `Extract the hierarchy: Units -> Chapters -> Topics.
-    For each Topic:
-    1. Determine difficulty (Easy, Medium, Complex).
-    2. Rate importance (High, Medium, Low).
-    3. Provide a specific 'daily exercise' (e.g., a practice problem or deep-dive question).
-    4. Provide a highly motivational sentence.
-    5. Determine the optimal study sequence (order).
-    6. Estimate time to consume (e.g., "30 mins").
-    7. Suggest a revision date/schedule (e.g., "Revise in 3 days").
-    Return as structured JSON.` }
+      { text: `Extract a complete study plan hierarchy: Units → Chapters → Topics.
+
+CRITICAL RULE: For each Chapter, identify ALL distinct sub-topics, individual concepts, named laws/theorems, processes, and sections within it — these become individual Topic cards. A chapter MUST have AT LEAST 3–6 topics. Topics must be specific, atomic learning units (e.g. "Newton's First Law of Motion", "Mitosis Prophase Stage", "Present Perfect Tense Usage", "Dijkstra's Algorithm") — NEVER use the chapter name itself as a topic. Each topic should be independently studiable in 20–45 minutes.
+
+For each Topic:
+1. Determine difficulty (Easy, Medium, Complex).
+2. Rate importance (High, Medium, Low).
+3. Provide a specific 'daily exercise' — a concrete practice problem, worked example prompt, or deep-dive question directly related to that sub-topic.
+4. Provide a highly motivational sentence specific to this concept.
+5. Determine the optimal study sequence (order) within the chapter.
+6. Estimate time to study (e.g., "25 mins", "35 mins").
+7. Suggest a revision schedule (e.g., "Revise in 1 day", "Revise in 3 days").
+Return as structured JSON.` }
     ];
 
     const response = await ai.models.generateContent({
@@ -469,8 +472,16 @@ app.post("/api/study-notes", rateLimiter, async (req, res) => {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Generate concise, high-quality study notes for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
-Focus on what a student needs to know to understand and remember this topic well.`,
+      contents: `Generate comprehensive, exam-ready study notes for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+
+Write like an expert tutor preparing a student for a high-stakes exam. Be thorough yet clear:
+- summary: 3-4 sentence overview explaining what this topic is, why it matters, and the core idea
+- keyConcepts: 5-8 essential terms with precise, exam-ready definitions (not generic — specific to this topic)
+- keyPoints: 6-10 bullet points covering all important facts, rules, properties, formulas, or processes a student MUST know
+- examples: 3-5 concrete worked examples, calculations, or real-world applications that illustrate the concept
+- commonMistakes: 3-5 frequent errors students make and how to avoid them
+- examTips: 3-4 specific strategies for answering exam questions on this topic
+- memoryTip: one vivid mnemonic, analogy, or mental model that makes the concept unforgettable`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -481,9 +492,10 @@ Focus on what a student needs to know to understand and remember this topic well
             keyPoints:      { type: Type.ARRAY, items: { type: Type.STRING } },
             examples:       { type: Type.ARRAY, items: { type: Type.STRING } },
             commonMistakes: { type: Type.ARRAY, items: { type: Type.STRING } },
+            examTips:       { type: Type.ARRAY, items: { type: Type.STRING } },
             memoryTip:      { type: Type.STRING },
           },
-          required: ["summary", "keyConcepts", "keyPoints", "examples", "commonMistakes", "memoryTip"]
+          required: ["summary", "keyConcepts", "keyPoints", "examples", "commonMistakes", "examTips", "memoryTip"]
         }
       }
     });
@@ -498,17 +510,41 @@ Focus on what a student needs to know to understand and remember this topic well
 
 // ─── /api/practice-exam ──────────────────────────────────────────────────────
 app.post("/api/practice-exam", rateLimiter, async (req, res) => {
-  const { topicTitle, context } = req.body;
+  const { topicTitle, context, examType = 'mcq' } = req.body;
   if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
 
   try {
     const apiKey = getApiKey();
     if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = `Create a practice exam for the topic: "${topicTitle}".${context ? ` Context: ${context}` : ''}
-Generate exactly 4 multiple-choice questions and 1 short-answer question.
-For each MCQ: provide exactly 4 answer options (as an array). The correctAnswer field must be the FULL TEXT of the correct option, matching exactly one option in the array.
-Make questions progressively harder. Be specific, clear, and educational.`;
+
+    let prompt = '';
+    if (examType === 'mcq') {
+      prompt = `Create a 10-question multiple-choice exam for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+Generate exactly 10 MCQ questions. Each must have exactly 4 options (A/B/C/D). The correctAnswer field must be the FULL TEXT of the correct option matching exactly one item in the options array.
+Make questions progressively harder (Q1-3 easy, Q4-7 medium, Q8-10 hard). Be specific, precise, and educational. Set type="mcq" for all.`;
+    } else if (examType === 'short') {
+      prompt = `Create a 10-question short-answer exam for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+Generate exactly 10 short-answer questions. Each answer should be 1-3 sentences. The correctAnswer field should be a concise model answer (1-3 sentences).
+Make questions progressively harder. Test understanding, definitions, and application. Set type="short" for all.`;
+    } else {
+      prompt = `Create a 10-question long-answer exam for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+Generate exactly 10 long-answer/essay questions. Each question should require a detailed paragraph response (5-10 sentences). The correctAnswer field should be a comprehensive model answer (3-5 sentences key points).
+Make questions progressively harder — test analysis, synthesis, and critical evaluation. Set type="long" for all.`;
+    }
+
+    const itemSchema: any = {
+      type: Type.OBJECT,
+      properties: {
+        id:            { type: Type.NUMBER },
+        type:          { type: Type.STRING },
+        question:      { type: Type.STRING },
+        options:       { type: Type.ARRAY, items: { type: Type.STRING } },
+        correctAnswer: { type: Type.STRING },
+        explanation:   { type: Type.STRING },
+      },
+      required: ["id", "type", "question", "correctAnswer", "explanation"]
+    };
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -517,23 +553,7 @@ Make questions progressively harder. Be specific, clear, and educational.`;
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
-          properties: {
-            questions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id:            { type: Type.NUMBER },
-                  type:          { type: Type.STRING },
-                  question:      { type: Type.STRING },
-                  options:       { type: Type.ARRAY, items: { type: Type.STRING } },
-                  correctAnswer: { type: Type.STRING },
-                  explanation:   { type: Type.STRING },
-                },
-                required: ["id", "type", "question", "correctAnswer", "explanation"]
-              }
-            }
-          },
+          properties: { questions: { type: Type.ARRAY, items: itemSchema } },
           required: ["questions"]
         }
       }

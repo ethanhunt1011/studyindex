@@ -1075,8 +1075,7 @@ export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; o
   );
 };
 
-export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, masteryData, studySessions }: { theme: 'day' | 'dark', setTheme: (t: 'day' | 'dark') => void, profile: any, updateProfile: (updates: any) => void, userStats?: any, masteryData?: any, studySessions?: any[] }) => {
-  const [focusSound, setFocusSound] = React.useState(false);
+export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, masteryData, studySessions, focusSoundType, setFocusSoundType }: { theme: 'day' | 'dark', setTheme: (t: 'day' | 'dark') => void, profile: any, updateProfile: (updates: any) => void, userStats?: any, masteryData?: any, studySessions?: any[], focusSoundType?: string, setFocusSoundType?: (t: any) => void }) => {
   const [reminderTime, setReminderTime] = React.useState(profile?.reminderTime || '09:00');
   const [focusTime, setFocusTime] = React.useState(profile?.focusTime || 25);
   const [topicsForDay, setTopicsForDay] = React.useState(profile?.topicsForDay || 2);
@@ -1137,14 +1136,37 @@ export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, m
             </div>
             <input type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} className={cn("p-2 rounded-xl border text-sm font-medium", theme === 'dark' ? "bg-[#0A0A0A] border-white/20 text-white" : "bg-[#F5F5F0] border-transparent text-[#1A1A1A]")} />
           </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Focus Sounds</p>
-              <p className={cn("text-xs", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Ambient audio while studying</p>
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-medium">Focus Sounds</p>
+                <p className={cn("text-xs", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Ambient audio plays while timer is running</p>
+              </div>
             </div>
-            <button onClick={() => setFocusSound(!focusSound)} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${focusSound ? 'bg-gradient-to-r from-[#5A5A40] to-[#4A4A30] text-white shadow-sm' : theme === 'dark' ? 'bg-white/10 text-white/60' : 'bg-gray-100 text-gray-500'}`}>
-              {focusSound ? '🎵 On' : 'Off'}
-            </button>
+            <div className="grid grid-cols-4 gap-2">
+              {([
+                { id: 'none',  label: 'Off',    icon: '🔇' },
+                { id: 'wind',  label: 'Wind',   icon: '🌬️' },
+                { id: 'rain',  label: 'Rain',   icon: '🌧️' },
+                { id: 'ocean', label: 'Ocean',  icon: '🌊' },
+              ] as const).map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setFocusSoundType?.(opt.id)}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl text-xs font-bold transition-all border",
+                    focusSoundType === opt.id
+                      ? "bg-gradient-to-b from-[#5A5A40] to-[#3F3F2D] text-white border-transparent shadow-md"
+                      : theme === 'dark'
+                        ? "bg-white/5 text-white/50 border-white/10 hover:bg-white/10"
+                        : "bg-gray-50 text-gray-500 border-gray-100 hover:bg-gray-100"
+                  )}
+                >
+                  <span className="text-xl">{opt.icon}</span>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

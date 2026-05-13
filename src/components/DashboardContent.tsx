@@ -195,6 +195,20 @@ const StudyNotesModal = ({ topic, onClose }: { topic: any; onClose: () => void }
                 </div>
               )}
 
+              {/* Exam Tips */}
+              {notes.examTips?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">🎯 Exam Tips</p>
+                  <div className="space-y-1.5">
+                    {notes.examTips.map((t: string, i: number) => (
+                      <div key={i} className="p-3 bg-purple-50 rounded-xl text-sm text-purple-800 border border-purple-100 flex gap-2">
+                        <span className="shrink-0 font-bold text-purple-400">{i + 1}.</span> {t}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Memory Tip */}
               {notes.memoryTip && (
                 <div className="p-4 bg-yellow-50 border border-yellow-100 rounded-2xl">
@@ -738,12 +752,20 @@ const ScheduleModal = ({
 // ─── Practice Exam Modal ──────────────────────────────────────────────────────
 interface PracticeQuestion {
   id: number;
-  type: 'mcq' | 'short';
+  type: 'mcq' | 'short' | 'long';
   question: string;
   options?: string[];
   correctAnswer: string;
   explanation: string;
 }
+
+type ExamType = 'mcq' | 'short' | 'long';
+
+const EXAM_TYPES: { id: ExamType; label: string; icon: string; desc: string; color: string }[] = [
+  { id: 'mcq',   label: 'Multiple Choice', icon: '🔘', desc: '10 MCQ questions · auto-graded', color: 'from-blue-500 to-blue-600' },
+  { id: 'short', label: 'Short Answer',    icon: '✏️', desc: '10 questions · 1-3 sentence answers', color: 'from-purple-500 to-purple-600' },
+  { id: 'long',  label: 'Long Answer',     icon: '📝', desc: '10 essay questions · paragraph answers', color: 'from-[#5A5A40] to-[#3F3F2D]' },
+];
 
 const PracticeExamModal = ({
   topic,
@@ -754,7 +776,8 @@ const PracticeExamModal = ({
   onClose: () => void;
   onSaveResult: (r: { topicId: string; topicTitle: string; score: number; totalQuestions: number }) => void;
 }) => {
-  const [phase, setPhase] = useState<'loading' | 'question' | 'feedback' | 'final'>('loading');
+  const [phase, setPhase] = useState<'select' | 'loading' | 'question' | 'feedback' | 'final'>('select');
+  const [examType, setExamType] = useState<ExamType | null>(null);
   const [questions, setQuestions] = useState<PracticeQuestion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
@@ -765,11 +788,13 @@ const PracticeExamModal = ({
   const [currentFeedback, setCurrentFeedback] = useState<{ isCorrect: boolean; feedback: string; score: number } | null>(null);
   const [finalScore, setFinalScore] = useState(0);
 
-  React.useEffect(() => {
+  const startExam = (type: ExamType) => {
+    setExamType(type);
+    setPhase('loading');
     fetch('/api/practice-exam', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topicTitle: topic.title, context: topic.dailyExercise || '' }),
+      body: JSON.stringify({ topicTitle: topic.title, context: topic.dailyExercise || '', examType: type }),
     })
       .then(r => r.json())
       .then(data => {
@@ -778,7 +803,7 @@ const PracticeExamModal = ({
         setPhase('question');
       })
       .catch((err: any) => setError(err.message || 'Failed to generate exam'));
-  }, []);
+  };
 
   const q = questions[currentQ];
 
@@ -847,6 +872,39 @@ const PracticeExamModal = ({
             <X className="w-5 h-5 text-[#5A5A40]" />
           </button>
 
+          {/* ── Exam Type Selection ───────────────────────────────────────── */}
+          {phase === 'select' && (
+            <div className="py-4">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#5A5A40] rounded-2xl flex items-center justify-center shrink-0">
+                  <GraduationCap className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-bold text-[#1A1A1A] leading-tight">Choose Exam Format</p>
+                  <p className="text-xs text-[#5A5A40]/60 truncate max-w-[220px]">{topic.title}</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {EXAM_TYPES.map(et => (
+                  <button
+                    key={et.id}
+                    onClick={() => startExam(et.id)}
+                    className="w-full flex items-center gap-4 p-4 rounded-2xl border border-[#1A1A1A]/8 bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-left group"
+                  >
+                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-xl bg-gradient-to-br shrink-0", et.color)}>
+                      {et.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-[#1A1A1A] text-sm">{et.label}</p>
+                      <p className="text-xs text-[#5A5A40]/60 mt-0.5">{et.desc}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[#5A5A40]/30 group-hover:text-[#5A5A40]/60 transition-colors" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {phase === 'loading' && !error && (
             <div className="py-16 flex flex-col items-center gap-4">
               <div className="w-12 h-12 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center">
@@ -854,7 +912,7 @@ const PracticeExamModal = ({
               </div>
               <Loader2 className="w-8 h-8 animate-spin text-[#5A5A40]" />
               <p className="text-sm text-[#5A5A40]/60 text-center">
-                Generating exam for<br />
+                Generating {examType === 'mcq' ? 'MCQ' : examType === 'short' ? 'short answer' : 'long answer'} exam for<br />
                 <span className="font-bold text-[#1A1A1A]">{topic.title}</span>
               </p>
             </div>
@@ -889,9 +947,9 @@ const PracticeExamModal = ({
 
               <span className={cn(
                 "inline-block text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md mb-3",
-                q.type === 'mcq' ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
+                q.type === 'mcq' ? "bg-blue-50 text-blue-700" : q.type === 'short' ? "bg-purple-50 text-purple-700" : "bg-[#5A5A40]/10 text-[#5A5A40]"
               )}>
-                {q.type === 'mcq' ? 'Multiple Choice' : 'Short Answer'}
+                {q.type === 'mcq' ? 'Multiple Choice' : q.type === 'short' ? 'Short Answer' : 'Long Answer'}
               </span>
 
               <p className="font-semibold text-[#1A1A1A] leading-relaxed mb-5">{q.question}</p>
@@ -925,8 +983,8 @@ const PracticeExamModal = ({
                   <textarea
                     value={shortAnswerText}
                     onChange={e => setShortAnswerText(e.target.value)}
-                    placeholder="Type your answer here..."
-                    className="w-full p-4 rounded-2xl border border-gray-200 bg-gray-50 text-sm resize-none h-28 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
+                    placeholder={q.type === 'long' ? 'Write a detailed paragraph answer...' : 'Type your answer here...'}
+                    className={cn("w-full p-4 rounded-2xl border border-gray-200 bg-gray-50 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20", q.type === 'long' ? 'h-48' : 'h-28')}
                   />
                   <button
                     onClick={handleShortSubmit}
@@ -941,7 +999,13 @@ const PracticeExamModal = ({
               {q.type !== 'mcq' && phase === 'feedback' && (
                 <div className="mb-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-[#5A5A40]/40 mb-1">Your Answer</p>
-                  <p className="text-sm text-[#1A1A1A]">{shortAnswerText}</p>
+                  <p className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{shortAnswerText}</p>
+                  {q.type === 'long' && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#5A5A40]/40 mb-1">Key Points (Model Answer)</p>
+                      <p className="text-xs text-[#5A5A40]/70 leading-relaxed">{q.correctAnswer}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1073,8 +1137,73 @@ export const DashboardContent = ({
   weeklyGoal,
   handleSaveWeeklyGoal,
   userStats,
+  focusSoundType,
 }: any) => {
   const isDark = isDeepFocus || theme === 'dark';
+
+  // ── Ambient sound engine (Web Audio API) ────────────────────────────────
+  const ambientRef = React.useRef<{ ctx: AudioContext; src: AudioBufferSourceNode; gain: GainNode } | null>(null);
+
+  const stopAmbient = React.useCallback(() => {
+    if (!ambientRef.current) return;
+    try {
+      const { ctx, src, gain } = ambientRef.current;
+      gain.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
+      setTimeout(() => { try { src.stop(); } catch {} try { ctx.close(); } catch {} }, 600);
+    } catch {}
+    ambientRef.current = null;
+  }, []);
+
+  const startAmbient = React.useCallback((type: string) => {
+    stopAmbient();
+    try {
+      const ctx = new AudioContext();
+      const rate = ctx.sampleRate;
+      const secs = 8;
+      const buf = ctx.createBuffer(1, rate * secs, rate);
+      const d = buf.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < d.length; i++) {
+        const w = Math.random() * 2 - 1;
+        if (type === 'rain') {
+          // White noise → highpass sounds like rain
+          b0 = 0.97 * b0 + w * 0.03;
+          d[i] = (w - b0) * 0.8;
+        } else if (type === 'wind') {
+          // Pink noise (Paul Kellet's method)
+          b0 = 0.99886*b0 + w*0.0555179; b1 = 0.99332*b1 + w*0.0750759; b2 = 0.96900*b2 + w*0.1538520;
+          d[i] = (b0 + b1 + b2 + w*0.5362) * 0.22;
+        } else {
+          // Brown noise → ocean waves (slow roll)
+          b0 = (b0 + w * 0.02) / 1.02;
+          const wave = Math.sin(i / (rate * 2.5) * Math.PI); // 2.5s swell
+          d[i] = b0 * 4 * (0.5 + 0.5 * Math.abs(wave));
+        }
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      gain.gain.setTargetAtTime(0.25, ctx.currentTime, 0.8);
+      // Add subtle filter per sound type
+      const filter = ctx.createBiquadFilter();
+      if (type === 'rain') { filter.type = 'highpass'; filter.frequency.value = 800; }
+      else if (type === 'wind') { filter.type = 'bandpass'; filter.frequency.value = 600; filter.Q.value = 0.5; }
+      else { filter.type = 'lowpass'; filter.frequency.value = 600; }
+      src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+      src.start();
+      ambientRef.current = { ctx, src, gain };
+    } catch (e) { console.warn('Ambient sound error', e); }
+  }, [stopAmbient]);
+
+  React.useEffect(() => {
+    if (isTimerRunning && focusSoundType && focusSoundType !== 'none') {
+      startAmbient(focusSoundType);
+    } else {
+      stopAmbient();
+    }
+    return () => { if (!isTimerRunning) stopAmbient(); };
+  }, [isTimerRunning, focusSoundType, startAmbient, stopAmbient]);
 
   // ── Local modal state ────────────────────────────────────────────────────
   const [showPracticeExam, setShowPracticeExam] = useState(false);
@@ -1393,6 +1522,115 @@ export const DashboardContent = ({
           </div>
         </section>
 
+        {/* ── Focus Timer ──────────────────────────────────────────────────── */}
+        <section className="mb-8">
+          <motion.div
+            animate={{
+              boxShadow: isDeepFocus && isTimerRunning
+                ? "0 0 40px rgba(90, 90, 64, 0.2)"
+                : "0 20px 25px -5px rgb(0 0 0 / 0.1)"
+            }}
+            className={cn(
+              "p-8 rounded-[40px] relative overflow-hidden transition-all duration-300",
+              isDeepFocus ? "bg-black border border-white/10" : "bg-white text-[#1A1A1A] shadow-2xl"
+            )}
+          >
+            {/* Liquid fill background */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: `${(timerSeconds / ((profile?.focusTime || 25) * 60)) * 100}%` }}
+              transition={{ duration: 1, ease: "easeInOut" }}
+              className="absolute inset-0 bg-blue-600/60 pointer-events-none"
+              style={{ borderRadius: 'inherit', transformOrigin: 'bottom' }}
+            >
+              <motion.div
+                animate={{ x: ["-100%", "0%"] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                className="absolute w-[200%] h-12 blur-lg"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.4), transparent)', top: '-20px' }}
+              />
+            </motion.div>
+
+            <div className="absolute top-0 right-0 p-8 opacity-10">
+              <Timer className={cn("w-24 h-24", isDark ? "text-white" : "text-[#1A1A1A]")} />
+            </div>
+
+            {isDark && isTimerRunning && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0.05, 0.15, 0.05] }}
+                transition={{ duration: 4, repeat: Infinity }}
+                className="absolute inset-0 bg-[#5A5A40]"
+              />
+            )}
+
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <div className={cn("text-[10px] font-bold uppercase tracking-[0.3em]", isDark ? "text-white/40" : "text-[#1A1A1A]/40")}>
+                  {isDeepFocus ? "Deep Focus Active" : "Focus Timer"}
+                  {focusSoundType && focusSoundType !== 'none' && isTimerRunning && (
+                    <span className="ml-2 opacity-70">
+                      {focusSoundType === 'wind' ? '🌬️' : focusSoundType === 'rain' ? '🌧️' : '🌊'}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIsDeepFocus(!isDeepFocus)}
+                  className={cn(
+                    "text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border transition-all",
+                    isDark
+                      ? "bg-[#5A5A40] border-[#5A5A40] text-white"
+                      : "border-[#1A1A1A]/20 text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:border-[#1A1A1A]"
+                  )}
+                >
+                  {isDeepFocus ? "Exit Deep Focus" : "Enter Deep Focus"}
+                </button>
+              </div>
+
+              <div className="flex items-end gap-4 mt-1">
+                <div className="flex flex-col">
+                  <div className={cn(
+                    "text-6xl font-serif font-bold tracking-tighter transition-colors duration-300",
+                    isDark ? "text-[#E6E6E6]" : "text-[#1A1A1A]"
+                  )}>
+                    {formatTime(timerSeconds)}
+                  </div>
+                  <div className={cn("text-xs font-serif italic mt-1 transition-colors duration-300", isDark ? "text-white/40" : "text-[#1A1A1A]/60")}>
+                    Hello, {profile?.displayName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Scholar'}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => setTimerSeconds((prev: number) => Math.max(0, prev - 5 * 60))}
+                    className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors text-xs font-bold", isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1A1A1A]/10 text-[#1A1A1A] hover:bg-[#1A1A1A]/20")}
+                  >
+                    -5m
+                  </button>
+                  <button
+                    onClick={() => setIsTimerRunning(!isTimerRunning)}
+                    className={cn("w-10 h-10 rounded-full flex items-center justify-center hover:scale-110 transition-transform active:scale-95", isDark ? "bg-white text-[#1A1A1A]" : "bg-[#1A1A1A] text-white")}
+                  >
+                    {isTimerRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                  </button>
+                  <button
+                    onClick={() => setTimerSeconds((prev: number) => prev + 5 * 60)}
+                    className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors text-xs font-bold", isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1A1A1A]/10 text-[#1A1A1A] hover:bg-[#1A1A1A]/20")}
+                  >
+                    +5m
+                  </button>
+                  <button
+                    onClick={() => { setIsTimerRunning(false); setTimerSeconds((profile?.focusTime || 25) * 60); }}
+                    className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors", isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1A1A1A]/10 text-[#1A1A1A] hover:bg-[#1A1A1A]/20")}
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+
         {/* ── Level + XP Bar ──────────────────────────────────────────────── */}
         <section className="mb-6">
           <div className={cn(
@@ -1485,110 +1723,6 @@ export const DashboardContent = ({
               );
             })}
           </div>
-        </section>
-
-        {/* ── Study Timer ──────────────────────────────────────────────────── */}
-        <section className="mb-10">
-          <motion.div
-            animate={{
-              boxShadow: isDeepFocus && isTimerRunning
-                ? "0 0 40px rgba(90, 90, 64, 0.2)"
-                : "0 20px 25px -5px rgb(0 0 0 / 0.1)"
-            }}
-            className={cn(
-              "p-8 rounded-[40px] relative overflow-hidden transition-all duration-300",
-              isDeepFocus ? "bg-black border border-white/10" : "bg-white text-[#1A1A1A] shadow-2xl"
-            )}
-          >
-            {/* Liquid fill background */}
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: `${(timerSeconds / ((profile?.focusTime || 25) * 60)) * 100}%` }}
-              transition={{ duration: 1, ease: "easeInOut" }}
-              className="absolute inset-0 bg-blue-600/60 pointer-events-none"
-              style={{ borderRadius: 'inherit', transformOrigin: 'bottom' }}
-            >
-              <motion.div
-                animate={{ x: ["-100%", "0%"] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                className="absolute w-[200%] h-12 blur-lg"
-                style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.4), transparent)', top: '-20px' }}
-              />
-            </motion.div>
-
-            <div className="absolute top-0 right-0 p-8 opacity-10">
-              <Timer className={cn("w-24 h-24", isDark ? "text-white" : "text-[#1A1A1A]")} />
-            </div>
-
-            {isDark && isTimerRunning && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0.05, 0.15, 0.05] }}
-                transition={{ duration: 4, repeat: Infinity }}
-                className="absolute inset-0 bg-[#5A5A40]"
-              />
-            )}
-
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-2">
-                <div className={cn("text-[10px] font-bold uppercase tracking-[0.3em]", isDark ? "text-white/40" : "text-[#1A1A1A]/40")}>
-                  {isDeepFocus ? "Deep Focus Active" : "Focus Timer"}
-                </div>
-                <button
-                  onClick={() => setIsDeepFocus(!isDeepFocus)}
-                  className={cn(
-                    "text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border transition-all",
-                    isDark
-                      ? "bg-[#5A5A40] border-[#5A5A40] text-white"
-                      : "border-[#1A1A1A]/20 text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:border-[#1A1A1A]"
-                  )}
-                >
-                  {isDeepFocus ? "Exit Deep Focus" : "Enter Deep Focus"}
-                </button>
-              </div>
-
-              <div className="flex items-end gap-4 mt-1">
-                <div className="flex flex-col">
-                  <div className={cn(
-                    "text-6xl font-serif font-bold tracking-tighter transition-colors duration-300",
-                    isDark ? "text-[#E6E6E6]" : "text-[#1A1A1A]"
-                  )}>
-                    {formatTime(timerSeconds)}
-                  </div>
-                  <div className={cn("text-xs font-serif italic mt-1 transition-colors duration-300", isDark ? "text-white/40" : "text-[#1A1A1A]/60")}>
-                    Hello, {profile?.displayName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Scholar'}
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mb-2">
-                  <button
-                    onClick={() => setTimerSeconds((prev: number) => Math.max(0, prev - 5 * 60))}
-                    className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors text-xs font-bold", isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1A1A1A]/10 text-[#1A1A1A] hover:bg-[#1A1A1A]/20")}
-                  >
-                    -5m
-                  </button>
-                  <button
-                    onClick={() => setIsTimerRunning(!isTimerRunning)}
-                    className={cn("w-10 h-10 rounded-full flex items-center justify-center hover:scale-110 transition-transform active:scale-95", isDark ? "bg-white text-[#1A1A1A]" : "bg-[#1A1A1A] text-white")}
-                  >
-                    {isTimerRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                  </button>
-                  <button
-                    onClick={() => setTimerSeconds((prev: number) => prev + 5 * 60)}
-                    className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors text-xs font-bold", isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1A1A1A]/10 text-[#1A1A1A] hover:bg-[#1A1A1A]/20")}
-                  >
-                    +5m
-                  </button>
-                  <button
-                    onClick={() => { setIsTimerRunning(false); setTimerSeconds((profile?.focusTime || 25) * 60); }}
-                    className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors", isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1A1A1A]/10 text-[#1A1A1A] hover:bg-[#1A1A1A]/20")}
-                  >
-                    <RotateCcw className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
         </section>
 
         {/* ── Topics for the Day ───────────────────────────────────────────── */}

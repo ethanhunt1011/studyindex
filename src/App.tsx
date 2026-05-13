@@ -161,6 +161,7 @@ export default function App() {
   const [theme, setTheme] = useState<'day' | 'dark'>('day');
   const [timerSeconds, setTimerSeconds] = useState(1500);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [focusSoundType, setFocusSoundType] = useState<'none' | 'wind' | 'rain' | 'ocean'>('none');
   const [scheduledTopics, setScheduledTopics] = useState<ScheduledTopic[]>([]);
   const [fileId, setFileId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -793,12 +794,13 @@ export default function App() {
               weeklyGoal={weeklyGoal}
               handleSaveWeeklyGoal={handleSaveWeeklyGoal}
               userStats={userStats}
+              focusSoundType={focusSoundType}
             />
           } />
           <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} masteryData={masteryData} examSettings={examSettings} handleSaveExamSettings={handleSaveExamSettings} practiceHistory={practiceHistory} sm2Cards={sm2Cards} userStats={userStats} />} />
           <Route path="/rooms" element={<StudyRooms />} />
           <Route path="/buddy" element={<StudyBuddy fileId={fileId} onMessageSent={handleChatMessage} />} />
-          <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} userStats={userStats} masteryData={masteryData} studySessions={studySessions} />} />
+          <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} userStats={userStats} masteryData={masteryData} studySessions={studySessions} focusSoundType={focusSoundType} setFocusSoundType={setFocusSoundType} />} />
         </Routes>
       </Layout>
 
