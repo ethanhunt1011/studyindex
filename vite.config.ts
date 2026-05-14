@@ -1,5 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import fs from 'fs';
 import { defineConfig, loadEnv } from 'vite';
@@ -28,7 +29,29 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './',
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon-32x32.png', 'apple-touch-icon.png', 'icon-*.png'],
+        manifest: false, // we manage manifest.json manually in public/
+        workbox: {
+          // Cache app shell and static assets
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          // API calls should NOT be cached — always network
+          navigateFallback: 'index.html',
+          navigateFallbackDenylist: [/^\/api\//],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com/,
+              handler: 'CacheFirst',
+              options: { cacheName: 'google-fonts', expiration: { maxAgeSeconds: 60 * 60 * 24 * 365 } },
+            },
+          ],
+        },
+      }),
+    ],
     define: {
       // Gemini (server-side key — injected so vite.config reads it; actual AI calls go through /api/*)
       'process.env.GEMINI_API_KEY': JSON.stringify(geminiKey),
