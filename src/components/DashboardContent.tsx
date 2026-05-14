@@ -1145,17 +1145,28 @@ export const DashboardContent = ({
   const ambientRef = React.useRef<{ ctx: AudioContext; src: AudioBufferSourceNode; gain: GainNode } | null>(null);
 
   const stopAmbient = React.useCallback(() => {
-    if (!ambientRef.current) return;
-    try {
-      const { ctx, src, gain } = ambientRef.current;
-      gain.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
-      setTimeout(() => { try { src.stop(); } catch {} try { ctx.close(); } catch {} }, 600);
-    } catch {}
+    const curr = ambientRef.current;
+    if (!curr) return;
     ambientRef.current = null;
+    const { ctx, src, gain } = curr;
+    try {
+      gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+    } catch {}
+    setTimeout(() => {
+      try { src.stop(); } catch {}
+      try { ctx.close(); } catch {}
+    }, 400);
   }, []);
 
   const startAmbient = React.useCallback((type: string) => {
-    stopAmbient();
+    // Kill previous context immediately (synchronous) to prevent any overlap
+    const prev = ambientRef.current;
+    ambientRef.current = null;
+    if (prev) {
+      try { prev.src.stop(); } catch {}
+      try { prev.ctx.close(); } catch {}
+    }
     try {
       const ctx = new AudioContext();
       const rate = ctx.sampleRate;
@@ -1166,17 +1177,14 @@ export const DashboardContent = ({
       for (let i = 0; i < d.length; i++) {
         const w = Math.random() * 2 - 1;
         if (type === 'rain') {
-          // White noise → highpass sounds like rain
           b0 = 0.97 * b0 + w * 0.03;
           d[i] = (w - b0) * 0.8;
         } else if (type === 'wind') {
-          // Pink noise (Paul Kellet's method)
           b0 = 0.99886*b0 + w*0.0555179; b1 = 0.99332*b1 + w*0.0750759; b2 = 0.96900*b2 + w*0.1538520;
           d[i] = (b0 + b1 + b2 + w*0.5362) * 0.22;
         } else {
-          // Brown noise → ocean waves (slow roll)
           b0 = (b0 + w * 0.02) / 1.02;
-          const wave = Math.sin(i / (rate * 2.5) * Math.PI); // 2.5s swell
+          const wave = Math.sin(i / (rate * 2.5) * Math.PI);
           d[i] = b0 * 4 * (0.5 + 0.5 * Math.abs(wave));
         }
       }
@@ -1185,7 +1193,6 @@ export const DashboardContent = ({
       const gain = ctx.createGain();
       gain.gain.value = 0;
       gain.gain.setTargetAtTime(0.25, ctx.currentTime, 0.8);
-      // Add subtle filter per sound type
       const filter = ctx.createBiquadFilter();
       if (type === 'rain') { filter.type = 'highpass'; filter.frequency.value = 800; }
       else if (type === 'wind') { filter.type = 'bandpass'; filter.frequency.value = 600; filter.Q.value = 0.5; }
@@ -1194,7 +1201,7 @@ export const DashboardContent = ({
       src.start();
       ambientRef.current = { ctx, src, gain };
     } catch (e) { console.warn('Ambient sound error', e); }
-  }, [stopAmbient]);
+  }, []);
 
   React.useEffect(() => {
     if (isTimerRunning && focusSoundType && focusSoundType !== 'none') {
@@ -1202,7 +1209,7 @@ export const DashboardContent = ({
     } else {
       stopAmbient();
     }
-    return () => { if (!isTimerRunning) stopAmbient(); };
+    return () => stopAmbient(); // always stop on cleanup — no stale closure conditional
   }, [isTimerRunning, focusSoundType, startAmbient, stopAmbient]);
 
   // ── Local modal state ────────────────────────────────────────────────────
