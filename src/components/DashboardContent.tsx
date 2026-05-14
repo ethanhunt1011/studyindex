@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   LogOut,
+  LogIn,
   Trash2,
   Upload,
   Loader2,
@@ -1213,6 +1214,7 @@ export const DashboardContent = ({
   }, [isTimerRunning, focusSoundType, startAmbient, stopAmbient]);
 
   // ── Local modal state ────────────────────────────────────────────────────
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [showPracticeExam, setShowPracticeExam] = useState(false);
   const [practiceExamTopic, setPracticeExamTopic] = useState<any>(null);
   const [showStudyNotes, setShowStudyNotes] = useState(false);
@@ -1309,6 +1311,59 @@ export const DashboardContent = ({
       isDark ? "bg-[#0A0A0A] text-white" : "bg-[#F5F5F0] text-[#1A1A1A]"
     )}>
 
+      {/* ── Guest Login Prompt ──────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showLoginPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-6"
+            onClick={() => setShowLoginPrompt(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+              onClick={e => e.stopPropagation()}
+              className={cn(
+                "w-full max-w-sm rounded-3xl shadow-2xl p-7 flex flex-col gap-5",
+                isDark ? "bg-[#141414] border border-white/8" : "bg-white border border-black/6"
+              )}
+            >
+              <div className="flex flex-col gap-1.5">
+                <p className="font-serif font-bold text-xl">Sign in to StudyIndex</p>
+                <p className={cn("text-sm leading-relaxed", isDark ? "text-white/50" : "text-black/40")}>
+                  Create a free account or sign in to sync your study plans, streaks, and progress across all your devices.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => { setShowLoginPrompt(false); handleLogout(); }}
+                  className="w-full py-3.5 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm tracking-wide hover:bg-[#3F3F2D] transition-colors flex items-center justify-center gap-2"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Continue to Sign In
+                </button>
+                <button
+                  onClick={() => setShowLoginPrompt(false)}
+                  className={cn(
+                    "w-full py-3.5 rounded-2xl font-bold text-sm tracking-wide transition-colors",
+                    isDark ? "bg-white/6 text-white/70 hover:bg-white/10" : "bg-black/5 text-black/50 hover:bg-black/8"
+                  )}
+                >
+                  Stay as Guest
+                </button>
+              </div>
+
+              <p className={cn("text-[10px] text-center leading-relaxed", isDark ? "text-white/25" : "text-black/25")}>
+                Your local guest data will remain in this browser.
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
       {showCelebration && (
         <CelebrationModal
@@ -1377,7 +1432,13 @@ export const DashboardContent = ({
       {isGuest && (
         <div className="bg-orange-500 text-white px-6 py-2 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2">
           <ShieldAlert className="w-3 h-3" />
-          Guest Mode: Data is saved locally but will be lost if you clear browser data.
+          Guest Mode — data stored locally only.
+          <button
+            onClick={() => setShowLoginPrompt(true)}
+            className="underline underline-offset-2 hover:opacity-80 transition-opacity"
+          >
+            Sign in to sync
+          </button>
         </div>
       )}
 
@@ -1402,9 +1463,19 @@ export const DashboardContent = ({
               {profile.displayName}
             </span>
           )}
-          <button onClick={handleLogout} className="p-2 hover:bg-[#1A1A1A]/5 rounded-full transition-colors">
-            <LogOut className="w-5 h-5 text-[#5A5A40]" />
-          </button>
+          {isGuest ? (
+            <button
+              onClick={() => setShowLoginPrompt(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest bg-[#5A5A40] text-white hover:bg-[#3F3F2D] transition-colors"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Sign In
+            </button>
+          ) : (
+            <button onClick={handleLogout} className="p-2 hover:bg-[#1A1A1A]/5 rounded-full transition-colors">
+              <LogOut className="w-5 h-5 text-[#5A5A40]" />
+            </button>
+          )}
         </div>
       </header>
 
