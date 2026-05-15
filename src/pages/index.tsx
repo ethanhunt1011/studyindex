@@ -1118,9 +1118,66 @@ const ACCENT_COLORS = [
   { id: 'teal',   label: 'Teal',    hex: '#14B8A6', bg: 'bg-teal-500'  },
 ];
 
-function applyAccentColor(hex: string) {
-  document.documentElement.style.setProperty('--accent', hex);
+function _darken(hex: string, factor: number): string {
+  const r = Math.round(parseInt(hex.slice(1,3),16) * factor);
+  const g = Math.round(parseInt(hex.slice(3,5),16) * factor);
+  const b = Math.round(parseInt(hex.slice(5,7),16) * factor);
+  return '#' + [r,g,b].map(v => Math.min(255,v).toString(16).padStart(2,'0')).join('');
+}
+
+function _alpha(hex: string, a: number): string {
+  return hex + Math.round(a * 255).toString(16).padStart(2,'0');
+}
+
+export function applyAccentColor(hex: string) {
   localStorage.setItem('si_accent', hex);
+  document.getElementById('si-accent-style')?.remove();
+  if (hex.toUpperCase() === '#5A5A40') return;
+
+  const d1 = _darken(hex, 0.82);  // hover / gradient mid  (~#4A4A30)
+  const d2 = _darken(hex, 0.70);  // gradient end          (~#3F3F2D)
+
+  const css = `
+    .bg-\\[\\#5A5A40\\]             { background-color: ${hex} !important; }
+    .bg-\\[\\#5A5A40\\]\\/5         { background-color: ${_alpha(hex,0.05)} !important; }
+    .bg-\\[\\#5A5A40\\]\\/8         { background-color: ${_alpha(hex,0.08)} !important; }
+    .bg-\\[\\#5A5A40\\]\\/10        { background-color: ${_alpha(hex,0.10)} !important; }
+    .bg-\\[\\#5A5A40\\]\\/20        { background-color: ${_alpha(hex,0.20)} !important; }
+    .bg-\\[\\#5A5A40\\]\\/40        { background-color: ${_alpha(hex,0.40)} !important; }
+    .text-\\[\\#5A5A40\\]           { color: ${hex} !important; }
+    .text-\\[\\#5A5A40\\]\\/20      { color: ${_alpha(hex,0.20)} !important; }
+    .text-\\[\\#5A5A40\\]\\/30      { color: ${_alpha(hex,0.30)} !important; }
+    .text-\\[\\#5A5A40\\]\\/40      { color: ${_alpha(hex,0.40)} !important; }
+    .text-\\[\\#5A5A40\\]\\/50      { color: ${_alpha(hex,0.50)} !important; }
+    .text-\\[\\#5A5A40\\]\\/60      { color: ${_alpha(hex,0.60)} !important; }
+    .text-\\[\\#5A5A40\\]\\/70      { color: ${_alpha(hex,0.70)} !important; }
+    .border-\\[\\#5A5A40\\]         { border-color: ${hex} !important; }
+    .border-\\[\\#5A5A40\\]\\/10    { border-color: ${_alpha(hex,0.10)} !important; }
+    .border-\\[\\#5A5A40\\]\\/20    { border-color: ${_alpha(hex,0.20)} !important; }
+    .border-\\[\\#5A5A40\\]\\/40    { border-color: ${_alpha(hex,0.40)} !important; }
+    .border-\\[\\#5A5A40\\]\\/50    { border-color: ${_alpha(hex,0.50)} !important; }
+    .from-\\[\\#5A5A40\\]           { --tw-gradient-from: ${hex} !important; }
+    .from-\\[\\#5A5A40\\]\\/5       { --tw-gradient-from: ${_alpha(hex,0.05)} !important; }
+    .from-\\[\\#5A5A40\\]\\/10      { --tw-gradient-from: ${_alpha(hex,0.10)} !important; }
+    .to-\\[\\#5A5A40\\]             { --tw-gradient-to: ${hex} !important; }
+    .to-\\[\\#5A5A40\\]\\/5         { --tw-gradient-to: ${_alpha(hex,0.05)} !important; }
+    .shadow-\\[\\#5A5A40\\]\\/20    { --tw-shadow-color: ${_alpha(hex,0.20)} !important; box-shadow: var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow) !important; }
+    .shadow-\\[\\#5A5A40\\]\\/25    { --tw-shadow-color: ${_alpha(hex,0.25)} !important; box-shadow: var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow) !important; }
+    .shadow-\\[\\#5A5A40\\]\\/30    { --tw-shadow-color: ${_alpha(hex,0.30)} !important; box-shadow: var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow) !important; }
+    .ring-\\[\\#5A5A40\\]           { --tw-ring-color: ${hex} !important; }
+    .ring-\\[\\#5A5A40\\]\\/10      { --tw-ring-color: ${_alpha(hex,0.10)} !important; }
+    .ring-\\[\\#5A5A40\\]\\/20      { --tw-ring-color: ${_alpha(hex,0.20)} !important; }
+    .ring-\\[\\#5A5A40\\]\\/30      { --tw-ring-color: ${_alpha(hex,0.30)} !important; }
+    .hover\\:bg-\\[\\#4A4A30\\]:hover { background-color: ${d1} !important; }
+    .to-\\[\\#4A4A30\\]             { --tw-gradient-to: ${d1} !important; }
+    .bg-\\[\\#4A4A30\\]             { background-color: ${d1} !important; }
+    .bg-\\[\\#3F3F2D\\]             { background-color: ${d2} !important; }
+    .to-\\[\\#3F3F2D\\]             { --tw-gradient-to: ${d2} !important; }
+  `;
+  const style = document.createElement('style');
+  style.id = 'si-accent-style';
+  style.textContent = css;
+  document.head.appendChild(style);
 }
 
 export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, masteryData, studySessions, focusSoundType, setFocusSoundType }: { theme: 'day' | 'dark', setTheme: (t: 'day' | 'dark') => void, profile: any, updateProfile: (updates: any) => void, userStats?: any, masteryData?: any, studySessions?: any[], focusSoundType?: string, setFocusSoundType?: (t: any) => void }) => {
