@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { saveLocalChats, getLocalChats } from '../lib/storage';
 import { ACHIEVEMENTS, levelFromXP, xpProgressInLevel, type UserStats } from '../lib/gamification';
-import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2, BrainCircuit, GraduationCap, TrendingUp, Brain, AlertCircle, ChevronDown, ChevronUp, Mic, Volume2, VolumeX, Award, Download, X } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, BarChart3, Clock, CheckCircle2, Flame, Target, Users, Share2, Copy, Check, BookOpen, Sparkles, Loader2, BrainCircuit, GraduationCap, TrendingUp, Brain, AlertCircle, ChevronDown, ChevronUp, Mic, Volume2, VolumeX, Award, Download, X, Edit3 } from 'lucide-react';
 export { Dashboard } from './Dashboard';
 export { Login } from './Login';
 
