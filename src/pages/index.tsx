@@ -1075,11 +1075,26 @@ export const StudyBuddy = ({ fileId, onMessageSent }: { fileId: string | null; o
   );
 };
 
+const ACCENT_COLORS = [
+  { id: 'olive',  label: 'Olive',   hex: '#5A5A40', bg: 'bg-[#5A5A40]' },
+  { id: 'blue',   label: 'Blue',    hex: '#3B82F6', bg: 'bg-blue-500'  },
+  { id: 'purple', label: 'Purple',  hex: '#8B5CF6', bg: 'bg-violet-500' },
+  { id: 'rose',   label: 'Rose',    hex: '#F43F5E', bg: 'bg-rose-500'  },
+  { id: 'amber',  label: 'Amber',   hex: '#F59E0B', bg: 'bg-amber-500' },
+  { id: 'teal',   label: 'Teal',    hex: '#14B8A6', bg: 'bg-teal-500'  },
+];
+
+function applyAccentColor(hex: string) {
+  document.documentElement.style.setProperty('--accent', hex);
+  localStorage.setItem('si_accent', hex);
+}
+
 export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, masteryData, studySessions, focusSoundType, setFocusSoundType }: { theme: 'day' | 'dark', setTheme: (t: 'day' | 'dark') => void, profile: any, updateProfile: (updates: any) => void, userStats?: any, masteryData?: any, studySessions?: any[], focusSoundType?: string, setFocusSoundType?: (t: any) => void }) => {
   const [reminderTime, setReminderTime] = React.useState(profile?.reminderTime || '09:00');
   const [focusTime, setFocusTime] = React.useState(profile?.focusTime || 25);
   const [topicsForDay, setTopicsForDay] = React.useState(profile?.topicsForDay || 2);
   const [showShareCard, setShowShareCard] = React.useState(false);
+  const [accentColor, setAccentColor] = React.useState(() => localStorage.getItem('si_accent') || '#5A5A40');
   const shareCardRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -1117,6 +1132,31 @@ export const Settings = ({ theme, setTheme, profile, updateProfile, userStats, m
             <button onClick={() => setTheme('day')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${theme === 'day' ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>☀️ Day</button>
             <button onClick={() => setTheme('dark')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${theme === 'dark' ? 'bg-[#1A1A1A] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>🌙 Dark</button>
           </div>
+        </div>
+
+        {/* Accent Color */}
+        <div className={cn("p-6 rounded-[32px] shadow-md shadow-black/5", theme === 'dark' ? "bg-[#1A1A1A]" : "bg-white")}>
+          <h2 className="text-base font-bold mb-1">Accent Color</h2>
+          <p className={cn("text-xs mb-4", theme === 'dark' ? "text-white/40" : "text-[#5A5A40]/60")}>Personalise your app's color scheme</p>
+          <div className="flex gap-3 flex-wrap">
+            {ACCENT_COLORS.map(c => (
+              <button
+                key={c.id}
+                title={c.label}
+                onClick={() => { setAccentColor(c.hex); applyAccentColor(c.hex); }}
+                className={cn(
+                  "w-9 h-9 rounded-full transition-all flex items-center justify-center",
+                  c.bg,
+                  accentColor === c.hex ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "hover:scale-105"
+                )}
+              >
+                {accentColor === c.hex && <Check className="w-4 h-4 text-white" />}
+              </button>
+            ))}
+          </div>
+          <p className={cn("text-[10px] mt-3", theme === 'dark' ? "text-white/30" : "text-gray-400")}>
+            Color is saved locally and applied on next visit.
+          </p>
         </div>
 
         {/* Focus & Reminders */}

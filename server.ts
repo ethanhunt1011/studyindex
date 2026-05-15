@@ -3,6 +3,7 @@ import express from "express";
 import { GoogleGenAI, Type } from "@google/genai";
 import path from "path";
 import { fileURLToPath } from "url";
+import { YoutubeTranscript } from "youtube-transcript";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -690,6 +691,97 @@ app.post("/api/related-topics", rateLimiter, async (req, res) => {
   } catch (error: any) {
     console.error('Error in /api/related-topics:', error);
     res.status(500).json({ error: error?.message || 'Error finding related topics.' });
+  }
+});
+
+// ─── /api/extract-youtube ─────────────────────────────────────────────────────
+app.post("/api/extract-youtube", rateLimiter, async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: "YouTube URL is required" });
+
+  // Extract video ID from various YouTube URL formats
+  const videoIdMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([^&\n?#]+)/);
+  if (!videoIdMatch) return res.status(400).json({ error: "Invalid YouTube URL. Use a youtube.com or youtu.be link." });
+  const videoId = videoIdMatch[1];
+
+  try {
+    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+    if (!transcript || transcript.length === 0) {
+      return res.status(400).json({ error: "No captions found for this video. Try a video with English captions enabled." });
+    }
+    const fullText = transcript.map((t: any) => t.text).join(' ');
+
+    const apiKey = getApiKey();
+    if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+    const ai = new GoogleGenAI({ apiKey });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { parts: [{ text: `You are given a transcript from a YouTube educational video. Extract a structured study plan from it.
+
+TRANSCRIPT:
+${fullText.slice(0, 30000)}
+
+Extract a complete study plan hierarchy: Units → Chapters → Topics.
+For each Topic: difficulty (Easy/Medium/Complex), importance (High/Medium/Low), a specific practice exercise, a motivational sentence, estimated study time, and revision schedule.
+Return as structured JSON with bookTitle (use the video topic as title).` }] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            bookTitle: { type: Type.STRING },
+            units: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  chapters: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        title: { type: Type.STRING },
+                        topics: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              id: { type: Type.STRING },
+                              title: { type: Type.STRING },
+                              difficulty: { type: Type.STRING },
+                              importance: { type: Type.STRING },
+                              dailyExercise: { type: Type.STRING },
+                              motivation: { type: Type.STRING },
+                              order: { type: Type.NUMBER },
+                              estimatedTime: { type: Type.STRING },
+                              revisionSchedule: { type: Type.STRING }
+                            },
+                            required: ["id", "title", "difficulty", "importance", "dailyExercise", "motivation", "order", "estimatedTime", "revisionSchedule"]
+                          }
+                        }
+                      },
+                      required: ["title", "topics"]
+                    }
+                  }
+                },
+                required: ["title", "chapters"]
+              }
+            }
+          },
+          required: ["bookTitle", "units"]
+        }
+      }
+    });
+    res.json(JSON.parse(response.text || "{}"));
+  } catch (error: any) {
+    console.error('Error in /api/extract-youtube:', error);
+    const msg = error?.message || '';
+    if (msg.includes('Could not retrieve') || msg.includes('Transcript is disabled')) {
+      return res.status(400).json({ error: "Captions are disabled for this video. Try a different video with English captions." });
+    }
+    res.status(500).json({ error: error?.message || 'Error processing YouTube video.' });
   }
 });
 

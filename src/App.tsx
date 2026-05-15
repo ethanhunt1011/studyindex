@@ -620,6 +620,55 @@ export default function App() {
     saveWeeklyGoal(goal);
   };
 
+  const handleYoutubeExtract = async (youtubeUrl: string) => {
+    setProcessing(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/extract-youtube', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: youtubeUrl }),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to process video (${response.status})`);
+      }
+      const planData = await response.json();
+      const syntheticId = 'yt_' + Date.now();
+      setFileId(syntheticId);
+      const newPlan: StudyPlan = {
+        id: syntheticId,
+        bookTitle: planData.bookTitle || 'YouTube Video',
+        units: (planData.units || []).map((u: any, uIdx: number) => ({
+          ...u,
+          id: u.id || crypto.randomUUID(),
+          order: u.order ?? uIdx,
+          chapters: (u.chapters || []).map((c: any, cIdx: number) => ({
+            ...c,
+            id: c.id || crypto.randomUUID(),
+            order: c.order ?? cIdx,
+            topics: (c.topics || []).map((t: any, tIdx: number) => ({
+              ...t,
+              id: t.id || crypto.randomUUID(),
+              order: t.order ?? tIdx,
+            })),
+          })),
+        })),
+        createdAt: new Date().toISOString(),
+      };
+      setPlans(prev => [newPlan, ...prev]);
+      setProgress(prev => ({
+        ...prev,
+        [newPlan.id]: { planId: newPlan.id, completedTopicIds: [], lastStudiedAt: new Date().toISOString() },
+      }));
+      handleDocumentUploaded();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to process YouTube video.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleSaveExamSettings = (settings: ExamSettings) => {
     setExamSettings(settings);
     saveExamSettings(settings);
@@ -795,6 +844,8 @@ export default function App() {
               handleSaveWeeklyGoal={handleSaveWeeklyGoal}
               userStats={userStats}
               focusSoundType={focusSoundType}
+              examSettings={examSettings}
+              handleYoutubeExtract={handleYoutubeExtract}
             />
           } />
           <Route path="/analytics" element={<Analytics studySessions={studySessions} plans={plans} progress={progress} profile={profile} masteryData={masteryData} examSettings={examSettings} handleSaveExamSettings={handleSaveExamSettings} practiceHistory={practiceHistory} sm2Cards={sm2Cards} userStats={userStats} />} />

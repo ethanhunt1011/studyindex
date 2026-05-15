@@ -29,6 +29,10 @@ import {
   BrainCircuit,
   Network,
   Star,
+  Youtube,
+  Link,
+  ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
@@ -1084,6 +1088,245 @@ const PracticeExamModal = ({
   );
 };
 
+// ─── Upload Section (File + YouTube tabs) ────────────────────────────────────
+const UploadSection = ({ isDark, fileId, processing, error, fileInputRef, handleFileUpload, handleYoutubeExtract }: any) => {
+  const [tab, setTab] = useState<'file' | 'youtube'>('file');
+  const [ytUrl, setYtUrl] = useState('');
+  const [ytError, setYtError] = useState('');
+
+  const submitYoutube = () => {
+    setYtError('');
+    if (!ytUrl.trim()) { setYtError('Paste a YouTube URL first.'); return; }
+    if (!ytUrl.match(/youtube\.com|youtu\.be/)) { setYtError('Must be a YouTube link (youtube.com or youtu.be).'); return; }
+    handleYoutubeExtract?.(ytUrl.trim());
+  };
+
+  return (
+    <section className="mb-8">
+      {/* Tab switcher */}
+      <div className={cn("flex gap-1 p-1 rounded-2xl mb-3 w-fit", isDark ? "bg-white/10" : "bg-gray-100")}>
+        <button
+          onClick={() => setTab('file')}
+          className={cn("flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold transition-all", tab === 'file' ? (isDark ? "bg-white text-[#1A1A1A]" : "bg-white text-[#1A1A1A] shadow-sm") : (isDark ? "text-white/50 hover:text-white" : "text-gray-500 hover:text-gray-700"))}
+        >
+          <Upload className="w-3.5 h-3.5" /> File
+        </button>
+        <button
+          onClick={() => setTab('youtube')}
+          className={cn("flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold transition-all", tab === 'youtube' ? (isDark ? "bg-white text-[#1A1A1A]" : "bg-white text-[#1A1A1A] shadow-sm") : (isDark ? "text-white/50 hover:text-white" : "text-gray-500 hover:text-gray-700"))}
+        >
+          <Youtube className="w-3.5 h-3.5" /> YouTube
+        </button>
+      </div>
+
+      {tab === 'file' ? (
+        <div
+          className={cn(
+            "border-2 border-dashed rounded-[32px] p-12 text-center transition-all cursor-pointer group",
+            isDark ? "border-white/20 hover:border-white/40 bg-white/5" : "border-[#5A5A40]/20 hover:border-[#5A5A40]/50 hover:bg-gradient-to-b hover:from-[#5A5A40]/5 hover:to-transparent",
+            processing ? "opacity-50 pointer-events-none" : ""
+          )}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".pdf,.txt,.docx,image/*" />
+          {processing ? (
+            <Loader2 className={cn("w-10 h-10 mx-auto animate-spin", isDark ? "text-white" : "text-[#5A5A40]")} />
+          ) : (
+            <Upload className={cn("w-10 h-10 mx-auto mb-4 transition-transform group-hover:scale-110", isDark ? "text-white" : "text-[#5A5A40]")} />
+          )}
+          <h3 className={cn("font-bold mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
+            {fileId ? 'File Uploaded ✓' : 'Upload Study Material'}
+          </h3>
+          <p className={cn("text-sm opacity-60", isDark ? "text-white" : "text-[#5A5A40]")}>
+            {fileId ? 'Upload another file to switch context.' : 'PDF, image, or text file'}
+          </p>
+        </div>
+      ) : (
+        <div className={cn("rounded-[32px] p-8 border-2", isDark ? "bg-white/5 border-white/20" : "bg-[#5A5A40]/5 border-[#5A5A40]/20")}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
+              <Youtube className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className={cn("font-bold", isDark ? "text-white" : "text-[#1A1A1A]")}>YouTube → Study Plan</h3>
+              <p className={cn("text-xs", isDark ? "text-white/50" : "text-[#5A5A40]/60")}>Paste a lecture URL to auto-generate a plan from the transcript</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className={cn("flex-1 flex items-center gap-2 rounded-2xl px-4 py-3 border", isDark ? "bg-white/5 border-white/10" : "bg-white border-gray-200")}>
+              <Link className={cn("w-4 h-4 shrink-0", isDark ? "text-white/40" : "text-gray-400")} />
+              <input
+                type="url"
+                placeholder="https://youtube.com/watch?v=..."
+                value={ytUrl}
+                onChange={e => { setYtUrl(e.target.value); setYtError(''); }}
+                onKeyDown={e => e.key === 'Enter' && submitYoutube()}
+                className={cn("flex-1 bg-transparent text-sm outline-none", isDark ? "text-white placeholder:text-white/30" : "text-[#1A1A1A] placeholder:text-gray-400")}
+              />
+            </div>
+            <button
+              onClick={submitYoutube}
+              disabled={processing}
+              className="shrink-0 px-4 py-3 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              {processing ? 'Processing…' : 'Generate'}
+            </button>
+          </div>
+          {(ytError || error) && (
+            <p className="text-red-500 text-xs mt-2 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {ytError || error}
+            </p>
+          )}
+          <p className={cn("text-[10px] mt-3", isDark ? "text-white/30" : "text-gray-400")}>
+            Works with videos that have English captions. Lecture videos work best.
+          </p>
+        </div>
+      )}
+      {tab === 'file' && error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
+    </section>
+  );
+};
+
+// ─── Onboarding Modal ─────────────────────────────────────────────────────────
+const OnboardingModal = ({ isDark, profile, onComplete }: { isDark: boolean; profile: any; onComplete: () => void }) => {
+  const [step, setStep] = useState(0);
+  const [goal, setGoal] = useState('');
+
+  const goals = [
+    { id: 'exam', icon: '🎓', label: 'Exam Prep', desc: 'Ace an upcoming test or certification' },
+    { id: 'learn', icon: '🧠', label: 'Learn a Topic', desc: 'Build deep understanding of a subject' },
+    { id: 'course', icon: '📖', label: 'Finish a Course', desc: 'Work through a book or curriculum' },
+    { id: 'skills', icon: '⚡', label: 'Build Skills', desc: 'Level up in a practical domain' },
+  ];
+
+  const name = profile?.displayName?.split(' ')[0] || 'Scholar';
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm px-6">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+        className={cn("w-full max-w-md rounded-[40px] p-8 shadow-2xl", isDark ? "bg-[#1A1A1A]" : "bg-white")}
+      >
+        {/* Step dots */}
+        <div className="flex gap-2 mb-6 justify-center">
+          {[0, 1, 2].map(i => (
+            <div key={i} className={cn("h-1.5 rounded-full transition-all", i === step ? "w-8 bg-[#5A5A40]" : "w-3 bg-gray-200")} />
+          ))}
+        </div>
+
+        {step === 0 && (
+          <>
+            <div className="text-4xl text-center mb-3">📚</div>
+            <h2 className={cn("text-2xl font-serif font-bold text-center mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
+              Welcome, {name}!
+            </h2>
+            <p className={cn("text-sm text-center mb-6", isDark ? "text-white/50" : "text-[#5A5A40]/60")}>
+              What brings you here today?
+            </p>
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              {goals.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => setGoal(g.id)}
+                  className={cn(
+                    "p-4 rounded-2xl border-2 text-left transition-all",
+                    goal === g.id
+                      ? "border-[#5A5A40] bg-[#5A5A40]/10"
+                      : (isDark ? "border-white/10 hover:border-white/30" : "border-gray-200 hover:border-[#5A5A40]/40")
+                  )}
+                >
+                  <div className="text-2xl mb-1">{g.icon}</div>
+                  <div className={cn("font-bold text-sm", isDark ? "text-white" : "text-[#1A1A1A]")}>{g.label}</div>
+                  <div className={cn("text-xs mt-0.5", isDark ? "text-white/40" : "text-gray-400")}>{g.desc}</div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => goal && setStep(1)}
+              disabled={!goal}
+              className="w-full py-3 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] transition-colors disabled:opacity-40"
+            >
+              Continue →
+            </button>
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <div className="text-4xl text-center mb-3">🎯</div>
+            <h2 className={cn("text-2xl font-serif font-bold text-center mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
+              How StudyIndex works
+            </h2>
+            <p className={cn("text-sm text-center mb-6", isDark ? "text-white/50" : "text-[#5A5A40]/60")}>
+              Three simple steps to smarter studying
+            </p>
+            <div className="space-y-4 mb-6">
+              {[
+                { n: '1', icon: '📄', title: 'Upload your material', desc: 'PDF, image, text — or a YouTube lecture URL' },
+                { n: '2', icon: '🤖', title: 'AI builds your plan', desc: 'Topics, exercises, and spaced repetition schedule' },
+                { n: '3', icon: '🏆', title: 'Study & earn XP', desc: 'Flashcards, practice exams, focus timer, and achievements' },
+              ].map(item => (
+                <div key={item.n} className={cn("flex items-start gap-4 p-4 rounded-2xl", isDark ? "bg-white/5" : "bg-[#5A5A40]/5")}>
+                  <div className="w-8 h-8 rounded-full bg-[#5A5A40] text-white flex items-center justify-center font-black text-sm shrink-0">
+                    {item.n}
+                  </div>
+                  <div>
+                    <div className={cn("font-bold text-sm", isDark ? "text-white" : "text-[#1A1A1A]")}>{item.icon} {item.title}</div>
+                    <div className={cn("text-xs mt-0.5", isDark ? "text-white/40" : "text-gray-400")}>{item.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setStep(2)}
+              className="w-full py-3 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] transition-colors"
+            >
+              Got it, let's go →
+            </button>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <div className="text-4xl text-center mb-3">🚀</div>
+            <h2 className={cn("text-2xl font-serif font-bold text-center mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
+              Ready to start!
+            </h2>
+            <p className={cn("text-sm text-center mb-6", isDark ? "text-white/50" : "text-[#5A5A40]/60")}>
+              Upload your first study material to generate your personalized plan.
+            </p>
+            <div className={cn("p-4 rounded-2xl mb-6", isDark ? "bg-white/5" : "bg-[#5A5A40]/5")}>
+              <p className={cn("text-sm font-semibold mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>Tip for {goals.find(g => g.id === goal)?.label || 'studying'}:</p>
+              <p className={cn("text-xs", isDark ? "text-white/50" : "text-gray-500")}>
+                {goal === 'exam' ? 'Upload past papers or your textbook index. AI will create a revision schedule.' :
+                 goal === 'learn' ? 'Upload a chapter PDF or paste a YouTube lecture. AI will break it into learnable chunks.' :
+                 goal === 'course' ? 'Upload your course syllabus or table of contents for a full structured plan.' :
+                 'Upload any learning material — tutorials, docs, or videos work great.'}
+              </p>
+            </div>
+            <button
+              onClick={onComplete}
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#5A5A40] to-[#3F3F2D] text-white font-bold text-sm hover:opacity-90 transition-opacity"
+            >
+              Upload my first material ↑
+            </button>
+            <button
+              onClick={onComplete}
+              className={cn("w-full py-2 mt-2 text-xs font-medium transition-colors", isDark ? "text-white/30 hover:text-white/50" : "text-gray-400 hover:text-gray-500")}
+            >
+              Skip for now
+            </button>
+          </>
+        )}
+      </motion.div>
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export const DashboardContent = ({
   user,
@@ -1139,8 +1382,11 @@ export const DashboardContent = ({
   handleSaveWeeklyGoal,
   userStats,
   focusSoundType,
+  examSettings,
+  handleYoutubeExtract,
 }: any) => {
   const isDark = isDeepFocus || theme === 'dark';
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('si_onboarded'));
 
   // ── Ambient sound engine (Web Audio API) ────────────────────────────────
   const ambientRef = React.useRef<{ ctx: AudioContext; src: AudioBufferSourceNode; gain: GainNode } | null>(null);
@@ -1428,6 +1674,17 @@ export const DashboardContent = ({
         />
       )}
 
+      {showOnboarding && (
+        <OnboardingModal
+          isDark={isDark}
+          profile={profile}
+          onComplete={() => {
+            localStorage.setItem('si_onboarded', '1');
+            setShowOnboarding(false);
+          }}
+        />
+      )}
+
       {/* ── Guest banner ────────────────────────────────────────────────────── */}
       {isGuest && (
         <div className="bg-orange-500 text-white px-6 py-2 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2">
@@ -1529,31 +1786,40 @@ export const DashboardContent = ({
           </div>
         </section>
 
+        {/* ── Exam Countdown ───────────────────────────────────────────────── */}
+        {examSettings?.examDate && (() => {
+          const daysLeft = Math.ceil((new Date(examSettings.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          if (daysLeft < 0) return null;
+          const urgency = daysLeft <= 7 ? 'red' : daysLeft <= 14 ? 'yellow' : 'green';
+          const bgMap = { red: isDark ? 'bg-red-900/30 border-red-500/30' : 'bg-red-50 border-red-200', yellow: isDark ? 'bg-yellow-900/20 border-yellow-500/30' : 'bg-yellow-50 border-yellow-200', green: isDark ? 'bg-green-900/20 border-green-500/30' : 'bg-green-50 border-green-200' };
+          const textMap = { red: 'text-red-600', yellow: 'text-yellow-600', green: 'text-green-600' };
+          return (
+            <section className="mb-8">
+              <div className={cn("p-4 rounded-[24px] border flex items-center gap-4", bgMap[urgency])}>
+                <div className={cn("text-center shrink-0 min-w-[56px]")}>
+                  <div className={cn("text-3xl font-serif font-black", textMap[urgency])}>{daysLeft}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">days left</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={cn("font-bold text-sm truncate", isDark ? "text-white" : "text-[#1A1A1A]")}>{examSettings.examName || 'Exam'}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{daysLeft <= 7 ? 'Final stretch — focus hard!' : daysLeft <= 14 ? 'Two weeks out — steady pace.' : 'Good time ahead — stay consistent.'}</p>
+                </div>
+                <GraduationCap className={cn("w-5 h-5 shrink-0", textMap[urgency])} />
+              </div>
+            </section>
+          );
+        })()}
+
         {/* ── Upload ───────────────────────────────────────────────────────── */}
-        <section className="mb-8">
-          <div
-            className={cn(
-              "border-2 border-dashed rounded-[32px] p-12 text-center transition-all cursor-pointer group",
-              isDark ? "border-white/20 hover:border-white/40 bg-white/5" : "border-[#5A5A40]/20 hover:border-[#5A5A40]/50 hover:bg-gradient-to-b hover:from-[#5A5A40]/5 hover:to-transparent",
-              processing ? "opacity-50 pointer-events-none" : ""
-            )}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".pdf,.txt,.docx,image/*" />
-            {processing ? (
-              <Loader2 className={cn("w-10 h-10 mx-auto animate-spin", isDark ? "text-white" : "text-[#5A5A40]")} />
-            ) : (
-              <Upload className={cn("w-10 h-10 mx-auto mb-4 transition-transform group-hover:scale-110", isDark ? "text-white" : "text-[#5A5A40]")} />
-            )}
-            <h3 className={cn("font-bold mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
-              {fileId ? 'File Uploaded ✓' : 'Upload Study Material'}
-            </h3>
-            <p className={cn("text-sm opacity-60", isDark ? "text-white" : "text-[#5A5A40]")}>
-              {fileId ? 'Upload another file to switch context.' : 'PDF, image, or text file'}
-            </p>
-          </div>
-          {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
-        </section>
+        <UploadSection
+          isDark={isDark}
+          fileId={fileId}
+          processing={processing}
+          error={error}
+          fileInputRef={fileInputRef}
+          handleFileUpload={handleFileUpload}
+          handleYoutubeExtract={handleYoutubeExtract}
+        />
 
         {/* ── Weekly Goal ──────────────────────────────────────────────────── */}
         <section className="mb-8">
