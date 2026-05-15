@@ -1529,6 +1529,32 @@ export const DashboardContent = ({
           </div>
         </section>
 
+        {/* ── Upload ───────────────────────────────────────────────────────── */}
+        <section className="mb-8">
+          <div
+            className={cn(
+              "border-2 border-dashed rounded-[32px] p-12 text-center transition-all cursor-pointer group",
+              isDark ? "border-white/20 hover:border-white/40 bg-white/5" : "border-[#5A5A40]/20 hover:border-[#5A5A40]/50 hover:bg-gradient-to-b hover:from-[#5A5A40]/5 hover:to-transparent",
+              processing ? "opacity-50 pointer-events-none" : ""
+            )}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".pdf,.txt,.docx,image/*" />
+            {processing ? (
+              <Loader2 className={cn("w-10 h-10 mx-auto animate-spin", isDark ? "text-white" : "text-[#5A5A40]")} />
+            ) : (
+              <Upload className={cn("w-10 h-10 mx-auto mb-4 transition-transform group-hover:scale-110", isDark ? "text-white" : "text-[#5A5A40]")} />
+            )}
+            <h3 className={cn("font-bold mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
+              {fileId ? 'File Uploaded ✓' : 'Upload Study Material'}
+            </h3>
+            <p className={cn("text-sm opacity-60", isDark ? "text-white" : "text-[#5A5A40]")}>
+              {fileId ? 'Upload another file to switch context.' : 'PDF, image, or text file'}
+            </p>
+          </div>
+          {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
+        </section>
+
         {/* ── Weekly Goal ──────────────────────────────────────────────────── */}
         <section className="mb-8">
           <div className={cn(
@@ -2027,32 +2053,6 @@ export const DashboardContent = ({
               })
             )}
           </div>
-        </section>
-
-        {/* ── Upload ───────────────────────────────────────────────────────── */}
-        <section className="mb-10">
-          <div
-            className={cn(
-              "border-2 border-dashed rounded-[32px] p-12 text-center transition-all cursor-pointer group",
-              isDark ? "border-white/20 hover:border-white/40 bg-white/5" : "border-[#5A5A40]/20 hover:border-[#5A5A40]/50 hover:bg-gradient-to-b hover:from-[#5A5A40]/5 hover:to-transparent",
-              processing ? "opacity-50 pointer-events-none" : ""
-            )}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".pdf,.txt,.docx,image/*" />
-            {processing ? (
-              <Loader2 className={cn("w-10 h-10 mx-auto animate-spin", isDark ? "text-white" : "text-[#5A5A40]")} />
-            ) : (
-              <Upload className={cn("w-10 h-10 mx-auto mb-4 transition-transform group-hover:scale-110", isDark ? "text-white" : "text-[#5A5A40]")} />
-            )}
-            <h3 className={cn("font-bold mb-1", isDark ? "text-white" : "text-[#1A1A1A]")}>
-              {fileId ? 'File Uploaded ✓' : 'Upload Study Material'}
-            </h3>
-            <p className={cn("text-sm opacity-60", isDark ? "text-white" : "text-[#5A5A40]")}>
-              {fileId ? 'Upload another file to switch context.' : 'PDF, image, or text file'}
-            </p>
-          </div>
-          {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
         </section>
 
         {/* ── Study Plans ──────────────────────────────────────────────────── */}
