@@ -148,6 +148,8 @@ interface ScheduledTopic {
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard, Analytics, StudyRooms, StudyBuddy, Settings, Login } from './pages';
+import { Privacy } from './pages/Privacy';
+import { Terms } from './pages/Terms';
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -852,6 +854,8 @@ export default function App() {
           <Route path="/rooms" element={<StudyRooms />} />
           <Route path="/buddy" element={<StudyBuddy fileId={fileId} onMessageSent={handleChatMessage} />} />
           <Route path="/settings" element={<Settings theme={theme} setTheme={setTheme} profile={profile} updateProfile={updateProfile} userStats={userStats} masteryData={masteryData} studySessions={studySessions} focusSoundType={focusSoundType} setFocusSoundType={setFocusSoundType} />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
         </Routes>
       </Layout>
 
