@@ -182,7 +182,7 @@ export default function App() {
   const [sm2Cards, setSm2Cards] = useState<Record<string, SM2Card>>({});
   const [masteryData, setMasteryData] = useState<Record<string, TopicMastery>>({});
   const [currentTopicId, setCurrentTopicId] = useState<string | null>(null);
-  const [examSettings, setExamSettings] = useState<ExamSettings | null>(null);
+  const [examSettings, setExamSettings] = useState<ExamSettings[]>([]);
   const [practiceHistory, setPracticeHistory] = useState<PracticeExamResult[]>([]);
   const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
   const [userStats, setUserStats] = useState<UserStats>(initialStats);
@@ -291,7 +291,7 @@ export default function App() {
       if (localMastery && Object.keys(localMastery).length) setMasteryData(localMastery);
       if (localSessions) setStudySessions(localSessions);
       if (localScheduled) setScheduledTopics(localScheduled);
-      if (localExam) setExamSettings(localExam);
+      if (localExam && localExam.length > 0) setExamSettings(localExam);
       if (localPractice && localPractice.length) setPracticeHistory(localPractice);
       if (localGoal) setWeeklyGoal(localGoal);
       if (localStats) setUserStats({ ...initialStats(), ...localStats });
@@ -669,9 +669,9 @@ export default function App() {
     }
   };
 
-  const handleSaveExamSettings = (settings: ExamSettings) => {
-    setExamSettings(settings);
-    saveExamSettings(settings);
+  const handleSaveExamSettings = (exams: ExamSettings[]) => {
+    setExamSettings(exams);
+    saveExamSettings(exams);
   };
 
   const handleSavePracticeResult = (result: Omit<PracticeExamResult, 'id' | 'date'>) => {

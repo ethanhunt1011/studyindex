@@ -248,20 +248,27 @@ export const clearLocalData = async () => {
 
 // ─── Exam Settings ────────────────────────────────────────────────────────────
 export interface ExamSettings {
+  id: string;
   examDate: string; // 'YYYY-MM-DD'
   examName: string;
 }
 
-export const saveExamSettings = async (settings: ExamSettings) => {
-  try { await Preferences.set({ key: STORAGE_KEYS.EXAM_SETTINGS, value: JSON.stringify(settings) }); }
+export const saveExamSettings = async (exams: ExamSettings[]) => {
+  try { await Preferences.set({ key: STORAGE_KEYS.EXAM_SETTINGS, value: JSON.stringify(exams) }); }
   catch (e) { console.error('Failed to save exam settings:', e); }
 };
 
-export const getExamSettings = async (): Promise<ExamSettings | null> => {
+export const getExamSettings = async (): Promise<ExamSettings[]> => {
   try {
     const { value } = await Preferences.get({ key: STORAGE_KEYS.EXAM_SETTINGS });
-    return value ? JSON.parse(value) : null;
-  } catch { return null; }
+    if (!value) return [];
+    const parsed = JSON.parse(value);
+    // Migrate old single-object format to array
+    if (!Array.isArray(parsed)) {
+      return parsed?.examDate ? [{ id: '1', ...parsed }] : [];
+    }
+    return parsed;
+  } catch { return []; }
 };
 
 // ─── Practice Exam History ────────────────────────────────────────────────────

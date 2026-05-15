@@ -1088,6 +1088,153 @@ const PracticeExamModal = ({
   );
 };
 
+// ─── Quick Chat (floating AI button) ─────────────────────────────────────────
+const QuickChat = ({ fileId, isDark }: { fileId: string | null; isDark: boolean }) => {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const bottomRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, open]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    const next = [...messages, { role: 'user' as const, text }];
+    setMessages(next);
+    setInput('');
+    setLoading(true);
+    try {
+      const history = messages.map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.text}`).join('\n');
+      const prompt = history ? `${history}\nUser: ${text}` : text;
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: prompt, fileId }) });
+      const data = await res.json();
+      setMessages(p => [...p, { role: 'ai', text: data.text || 'Sorry, no response.' }]);
+    } catch {
+      setMessages(p => [...p, { role: 'ai', text: 'Connection error. Try again.' }]);
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <>
+      {/* Floating button */}
+      <motion.button
+        onClick={() => setOpen(p => !p)}
+        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+        className={cn(
+          "fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-colors",
+          open ? "bg-[#1A1A1A]" : "bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D]"
+        )}
+        title="Quick AI Chat"
+      >
+        <AnimatePresence mode="wait">
+          {open
+            ? <motion.div key="x" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }}><X className="w-6 h-6 text-white" /></motion.div>
+            : <motion.div key="s" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }}><Sparkles className="w-6 h-6 text-white" /></motion.div>
+          }
+        </AnimatePresence>
+        {!open && messages.length > 0 && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
+            {messages.filter(m => m.role === 'ai').length}
+          </span>
+        )}
+      </motion.button>
+
+      {/* Chat panel */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+            className={cn(
+              "fixed bottom-40 right-4 z-40 w-[min(360px,calc(100vw-2rem))] rounded-[28px] shadow-2xl flex flex-col overflow-hidden",
+              isDark ? "bg-[#1A1A1A] border border-white/10" : "bg-white border border-gray-100"
+            )}
+            style={{ height: '420px' }}
+          >
+            {/* Header */}
+            <div className={cn("px-5 py-3 border-b flex items-center gap-3 shrink-0", isDark ? "border-white/10" : "border-gray-100")}>
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#5A5A40] to-[#3F3F2D] flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={cn("font-bold text-sm", isDark ? "text-white" : "text-[#1A1A1A]")}>Ask AI</p>
+                <p className={cn("text-[10px]", isDark ? "text-white/40" : "text-[#5A5A40]/50")}>
+                  {fileId ? 'Answering from your uploaded material' : 'General study assistant'}
+                </p>
+              </div>
+              {messages.length > 0 && (
+                <button onClick={() => setMessages([])} className={cn("text-[10px] font-bold", isDark ? "text-white/30 hover:text-white/60" : "text-gray-400 hover:text-gray-600")}>
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Messages */}
+            <div className={cn("flex-1 overflow-y-auto p-4 space-y-3", isDark ? "bg-[#0F0F0F]" : "bg-gray-50/50")}>
+              {messages.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-center gap-2">
+                  <div className="text-3xl">💬</div>
+                  <p className={cn("text-xs", isDark ? "text-white/30" : "text-gray-400")}>
+                    {fileId ? 'Ask anything about your material' : 'Ask a study question'}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 justify-center mt-2">
+                    {(fileId
+                      ? ['Summarise this', 'Key concepts?', 'Quiz me']
+                      : ['Explain spaced repetition', 'Study tips', 'How to focus?']
+                    ).map(s => (
+                      <button key={s} onClick={() => { setInput(s); }} className={cn("text-[10px] font-semibold px-3 py-1.5 rounded-full border transition-colors", isDark ? "border-white/15 text-white/50 hover:border-white/30" : "border-gray-200 text-gray-500 hover:border-[#5A5A40]/40")}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <div key={i} className={cn("max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap", m.role === 'user' ? "ml-auto bg-[#5A5A40] text-white rounded-tr-sm" : (isDark ? "bg-white/10 text-white rounded-tl-sm" : "bg-white text-[#1A1A1A] shadow-sm rounded-tl-sm"))}>
+                  {m.text}
+                </div>
+              ))}
+              {loading && (
+                <div className={cn("flex items-center gap-2 px-3 py-2 rounded-2xl rounded-tl-sm w-fit text-xs", isDark ? "bg-white/10 text-white/60" : "bg-white text-gray-500 shadow-sm")}>
+                  <Loader2 className="w-3 h-3 animate-spin" /> Thinking…
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input */}
+            <div className={cn("p-3 border-t shrink-0", isDark ? "border-white/10 bg-[#1A1A1A]" : "border-gray-100 bg-white")}>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}
+                  placeholder="Ask anything…"
+                  className={cn("flex-1 rounded-xl px-3 py-2 text-xs outline-none", isDark ? "bg-white/10 text-white placeholder:text-white/30 focus:bg-white/15" : "bg-gray-100 text-[#1A1A1A] placeholder:text-gray-400 focus:bg-gray-200")}
+                />
+                <button
+                  onClick={send}
+                  disabled={!input.trim() || loading}
+                  className="w-9 h-9 rounded-xl bg-[#5A5A40] text-white flex items-center justify-center shrink-0 hover:bg-[#4A4A30] disabled:opacity-40 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" /></svg>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
 // ─── Upload Section (File + YouTube tabs) ────────────────────────────────────
 const UploadSection = ({ isDark, fileId, processing, error, fileInputRef, handleFileUpload, handleYoutubeExtract }: any) => {
   const [tab, setTab] = useState<'file' | 'youtube'>('file');
@@ -1685,6 +1832,9 @@ export const DashboardContent = ({
         />
       )}
 
+      {/* ── Floating Quick Chat ─────────────────────────────────────────────── */}
+      <QuickChat fileId={fileId} isDark={isDark} />
+
       {/* ── Guest banner ────────────────────────────────────────────────────── */}
       {isGuest && (
         <div className="bg-orange-500 text-white px-6 py-2 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2">
@@ -1787,25 +1937,32 @@ export const DashboardContent = ({
         </section>
 
         {/* ── Exam Countdown ───────────────────────────────────────────────── */}
-        {examSettings?.examDate && (() => {
-          const daysLeft = Math.ceil((new Date(examSettings.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-          if (daysLeft < 0) return null;
-          const urgency = daysLeft <= 7 ? 'red' : daysLeft <= 14 ? 'yellow' : 'green';
-          const bgMap = { red: isDark ? 'bg-red-900/30 border-red-500/30' : 'bg-red-50 border-red-200', yellow: isDark ? 'bg-yellow-900/20 border-yellow-500/30' : 'bg-yellow-50 border-yellow-200', green: isDark ? 'bg-green-900/20 border-green-500/30' : 'bg-green-50 border-green-200' };
-          const textMap = { red: 'text-red-600', yellow: 'text-yellow-600', green: 'text-green-600' };
+        {Array.isArray(examSettings) && examSettings.length > 0 && (() => {
+          const upcoming = [...examSettings]
+            .map(e => ({ ...e, daysLeft: Math.ceil((new Date(e.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) }))
+            .filter(e => e.daysLeft >= 0)
+            .sort((a, b) => a.daysLeft - b.daysLeft);
+          if (!upcoming.length) return null;
           return (
-            <section className="mb-8">
-              <div className={cn("p-4 rounded-[24px] border flex items-center gap-4", bgMap[urgency])}>
-                <div className={cn("text-center shrink-0 min-w-[56px]")}>
-                  <div className={cn("text-3xl font-serif font-black", textMap[urgency])}>{daysLeft}</div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">days left</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={cn("font-bold text-sm truncate", isDark ? "text-white" : "text-[#1A1A1A]")}>{examSettings.examName || 'Exam'}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{daysLeft <= 7 ? 'Final stretch — focus hard!' : daysLeft <= 14 ? 'Two weeks out — steady pace.' : 'Good time ahead — stay consistent.'}</p>
-                </div>
-                <GraduationCap className={cn("w-5 h-5 shrink-0", textMap[urgency])} />
-              </div>
+            <section className="mb-8 space-y-2">
+              {upcoming.map(exam => {
+                const urgency = exam.daysLeft <= 7 ? 'red' : exam.daysLeft <= 14 ? 'yellow' : 'green';
+                const bgMap = { red: isDark ? 'bg-red-900/30 border-red-500/30' : 'bg-red-50 border-red-200', yellow: isDark ? 'bg-yellow-900/20 border-yellow-500/30' : 'bg-yellow-50 border-yellow-200', green: isDark ? 'bg-green-900/20 border-green-500/30' : 'bg-green-50 border-green-200' };
+                const textMap = { red: 'text-red-600', yellow: 'text-yellow-600', green: 'text-green-600' };
+                return (
+                  <div key={exam.id} className={cn("p-4 rounded-[24px] border flex items-center gap-4", bgMap[urgency])}>
+                    <div className="text-center shrink-0 min-w-[56px]">
+                      <div className={cn("text-3xl font-serif font-black", textMap[urgency])}>{exam.daysLeft}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">days left</div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("font-bold text-sm truncate", isDark ? "text-white" : "text-[#1A1A1A]")}>{exam.examName || 'Exam'}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{exam.daysLeft <= 7 ? 'Final stretch — focus hard!' : exam.daysLeft <= 14 ? 'Two weeks out — steady pace.' : 'Good time ahead — stay consistent.'}</p>
+                    </div>
+                    <GraduationCap className={cn("w-5 h-5 shrink-0", textMap[urgency])} />
+                  </div>
+                );
+              })}
             </section>
           );
         })()}

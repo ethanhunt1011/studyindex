@@ -22,9 +22,11 @@ interface AnalyticsProps {
 }
 
 export const Analytics = ({ studySessions = [], plans = [], progress = {}, profile, masteryData = {}, examSettings, handleSaveExamSettings, practiceHistory = [], sm2Cards = {} }: AnalyticsProps) => {
-  const [editingExam, setEditingExam] = useState(false);
-  const [examNameInput, setExamNameInput] = useState(examSettings?.examName || '');
-  const [examDateInput, setExamDateInput] = useState(examSettings?.examDate || '');
+  const exams: any[] = Array.isArray(examSettings) ? examSettings : (examSettings?.examDate ? [{ id: '1', ...examSettings }] : []);
+  const [showAddExam, setShowAddExam] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [examNameInput, setExamNameInput] = useState('');
+  const [examDateInput, setExamDateInput] = useState('');
   const [showAllWeakTopics, setShowAllWeakTopics] = useState(false);
   const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({});
   // ── Compute stats ────────────────────────────────────────────────────────
@@ -84,17 +86,32 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
     : 0;
   const readinessPct = Math.round(completionPct * 0.6 + avgMastery * 0.4);
 
-  const daysUntilExam = examSettings?.examDate
-    ? Math.ceil((new Date(examSettings.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    : null;
-
   const weakTopics = [...allTopicsFlat]
     .filter((t: any) => masteryData[t.id])
     .sort((a: any, b: any) => (masteryData[a.id]?.score ?? 100) - (masteryData[b.id]?.score ?? 100));
 
-  const readinessColor = readinessPct >= 70 ? 'text-green-700' : readinessPct >= 40 ? 'text-yellow-700' : 'text-red-700';
-  const readinessBg = readinessPct >= 70 ? 'bg-green-50 border-green-100' : readinessPct >= 40 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100';
-  const readinessFill = readinessPct >= 70 ? 'bg-green-500' : readinessPct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+  const saveExam = (id: string | null) => {
+    if (!examDateInput) return;
+    const updated = id
+      ? exams.map(e => e.id === id ? { ...e, examName: examNameInput || 'Exam', examDate: examDateInput } : e)
+      : [...exams, { id: Date.now().toString(), examName: examNameInput || 'Exam', examDate: examDateInput }];
+    handleSaveExamSettings?.(updated);
+    setShowAddExam(false);
+    setEditingId(null);
+    setExamNameInput('');
+    setExamDateInput('');
+  };
+
+  const deleteExam = (id: string) => {
+    handleSaveExamSettings?.(exams.filter(e => e.id !== id));
+  };
+
+  const startEdit = (exam: any) => {
+    setEditingId(exam.id);
+    setExamNameInput(exam.examName);
+    setExamDateInput(exam.examDate);
+    setShowAddExam(false);
+  };
 
   // ── Forgetting Curve (Ebbinghaus) — R = e^(-t / S) ──────────────────────
   // S = SM-2 interval (stability), t = days since last review
@@ -128,113 +145,130 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
       </div>
 
 
-      {/* ── Exam Readiness Predictor — always visible ──────────────────────── */}
-      <div className={cn("rounded-[32px] shadow-md shadow-black/5 p-6", examSettings?.examDate ? readinessBg : "bg-white")}>
+      {/* ── Exam Readiness — multi-exam ──────────────────────────────────────── */}
+      <div className="bg-white rounded-[32px] shadow-md shadow-black/5 p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-[#5A5A40]" />
             <h2 className="font-bold text-[#1A1A1A]">Exam Readiness</h2>
+            {exams.length > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-[#5A5A40]/10 text-[#5A5A40] rounded-full">{exams.length} exam{exams.length > 1 ? 's' : ''}</span>
+            )}
           </div>
           <button
-            onClick={() => { setEditingExam(!editingExam); setExamNameInput(examSettings?.examName || ''); setExamDateInput(examSettings?.examDate || ''); }}
-            className="text-xs font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] transition-colors"
+            onClick={() => { setShowAddExam(p => !p); setEditingId(null); setExamNameInput(''); setExamDateInput(''); }}
+            className="flex items-center gap-1 text-xs font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] transition-colors"
           >
-            {examSettings?.examDate ? 'Edit' : '+ Set Exam Date'}
+            <Plus className="w-3.5 h-3.5" /> Add Exam
           </button>
         </div>
 
-        {editingExam && (
+        {/* Add new exam form */}
+        {showAddExam && (
           <div className="space-y-3 mb-5 p-4 bg-[#F5F5F0] rounded-2xl">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 block mb-1">Exam Name</label>
-              <input
-                type="text"
-                value={examNameInput}
-                onChange={e => setExamNameInput(e.target.value)}
-                placeholder="e.g. Final Exam, IELTS..."
-                className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
-              />
+            <p className="text-xs font-bold text-[#5A5A40]/60 uppercase tracking-widest">New Exam</p>
+            <input type="text" value={examNameInput} onChange={e => setExamNameInput(e.target.value)} placeholder="Exam name (e.g. IELTS, Finals...)" className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
+            <input type="date" value={examDateInput} min={new Date().toISOString().split('T')[0]} onChange={e => setExamDateInput(e.target.value)} className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
+            <div className="flex gap-2">
+              <button onClick={() => saveExam(null)} disabled={!examDateInput} className="flex-1 py-2 rounded-xl bg-[#5A5A40] text-white text-sm font-bold disabled:opacity-50 hover:bg-[#4A4A30] transition-colors">Add</button>
+              <button onClick={() => setShowAddExam(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
             </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 block mb-1">Exam Date</label>
-              <input
-                type="date"
-                value={examDateInput}
-                min={new Date().toISOString().split('T')[0]}
-                onChange={e => setExamDateInput(e.target.value)}
-                className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
-              />
-            </div>
-            <button
-              onClick={() => { if (handleSaveExamSettings && examDateInput) { handleSaveExamSettings({ examDate: examDateInput, examName: examNameInput || 'Exam' }); setEditingExam(false); } }}
-              disabled={!examDateInput}
-              className="w-full py-2 rounded-xl bg-[#5A5A40] text-white text-sm font-bold disabled:opacity-50 hover:bg-[#4A4A30] transition-colors"
-            >
-              Save
-            </button>
           </div>
         )}
 
-        {examSettings?.examDate ? (
-          <>
-            <div className="flex items-center gap-4 mb-4">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-[#1A1A1A]">{examSettings.examName || 'Exam'}</span>
-                  <span className={cn("font-bold text-sm", readinessColor)}>{readinessPct}% ready</span>
-                </div>
-                <div className="h-3 bg-white/60 rounded-full overflow-hidden border border-white/40">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${readinessPct}%` }}
-                    transition={{ duration: 1, ease: 'easeOut' }}
-                    className={cn("h-full rounded-full", readinessFill)}
-                  />
-                </div>
-                <div className="flex justify-between mt-1.5 text-[10px] text-[#5A5A40]/60">
-                  <span>Completion: {Math.round(completionPct)}%</span>
-                  <span>Avg Mastery: {Math.round(avgMastery)}%</span>
-                </div>
-              </div>
-              {daysUntilExam !== null && (
-                <div className="text-center shrink-0">
-                  <div className={cn("text-3xl font-serif font-bold", daysUntilExam <= 7 ? 'text-red-600' : daysUntilExam <= 14 ? 'text-yellow-600' : 'text-green-600')}>
-                    {daysUntilExam > 0 ? daysUntilExam : 0}
+        {exams.length === 0 && !showAddExam && (
+          <p className="text-sm text-[#5A5A40]/60 italic">Add an exam date to track your readiness and get topic-by-topic insights.</p>
+        )}
+
+        <div className="space-y-4">
+          {exams.map((exam: any) => {
+            const daysLeft = Math.ceil((new Date(exam.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+            const rColor = readinessPct >= 70 ? 'text-green-700' : readinessPct >= 40 ? 'text-yellow-700' : 'text-red-700';
+            const rBg = readinessPct >= 70 ? 'bg-green-50 border-green-100' : readinessPct >= 40 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100';
+            const rFill = readinessPct >= 70 ? 'bg-green-500' : readinessPct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+            const isPast = daysLeft < 0;
+
+            return (
+              <div key={exam.id} className={cn("rounded-2xl border p-4", isPast ? 'bg-gray-50 border-gray-200 opacity-60' : rBg)}>
+                {editingId === exam.id ? (
+                  <div className="space-y-3">
+                    <input type="text" value={examNameInput} onChange={e => setExamNameInput(e.target.value)} className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
+                    <input type="date" value={examDateInput} onChange={e => setExamDateInput(e.target.value)} className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
+                    <div className="flex gap-2">
+                      <button onClick={() => saveExam(exam.id)} disabled={!examDateInput} className="flex-1 py-1.5 rounded-xl bg-[#5A5A40] text-white text-sm font-bold disabled:opacity-50">Save</button>
+                      <button onClick={() => setEditingId(null)} className="px-4 py-1.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-500">Cancel</button>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-[#5A5A40]/50 font-semibold">days left</div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0 mr-3">
+                        <p className="font-bold text-sm text-[#1A1A1A] truncate">{exam.examName || 'Exam'}</p>
+                        <p className="text-xs text-[#5A5A40]/60 mt-0.5">{new Date(exam.examDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-center">
+                          <div className={cn("text-2xl font-serif font-bold", isPast ? 'text-gray-400' : daysLeft <= 7 ? 'text-red-600' : daysLeft <= 14 ? 'text-yellow-600' : 'text-green-600')}>
+                            {isPast ? 'Done' : daysLeft}
+                          </div>
+                          {!isPast && <div className="text-[10px] text-[#5A5A40]/50 font-semibold leading-none">days left</div>}
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <button onClick={() => startEdit(exam)} className="p-1.5 rounded-lg hover:bg-white/60 text-[#5A5A40]/50 hover:text-[#5A5A40] transition-colors" title="Edit">
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => deleteExam(exam.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-400 transition-colors" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!isPast && (
+                      <>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-[#5A5A40]/60">Readiness</span>
+                          <span className={cn("text-xs font-bold", rColor)}>{readinessPct}%</span>
+                        </div>
+                        <div className="h-2 bg-white/60 rounded-full overflow-hidden border border-white/40 mb-2">
+                          <motion.div initial={{ width: 0 }} animate={{ width: `${readinessPct}%` }} transition={{ duration: 1, ease: 'easeOut' }} className={cn("h-full rounded-full", rFill)} />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-[#5A5A40]/60">
+                          <span>Completion: {Math.round(completionPct)}%</span>
+                          <span>Avg Mastery: {Math.round(avgMastery)}%</span>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {weakTopics.length > 0 && exams.some((e: any) => Math.ceil((new Date(e.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) >= 0) && (
+          <div className="mt-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Weakest Areas — Focus Here</p>
+            <div className="space-y-1.5">
+              {(showAllWeakTopics ? weakTopics : weakTopics.slice(0, 3)).map((t: any) => (
+                <div key={t.id} className="flex items-center justify-between bg-[#F5F5F0] rounded-xl px-3 py-2">
+                  <span className="text-xs font-medium text-[#1A1A1A] truncate flex-1 mr-2">{t.title}</span>
+                  <span className={cn("text-xs font-bold shrink-0", masteryData[t.id]?.score >= 50 ? 'text-yellow-600' : 'text-red-600')}>
+                    {masteryData[t.id]?.score ?? 0}%
+                  </span>
                 </div>
+              ))}
+              {weakTopics.length > 3 && (
+                <button onClick={() => setShowAllWeakTopics(p => !p)} className="text-[10px] font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] flex items-center gap-1 mt-1">
+                  {showAllWeakTopics ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> {weakTopics.length - 3} more</>}
+                </button>
               )}
             </div>
+          </div>
+        )}
 
-            {weakTopics.length > 0 && (
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Weakest Areas — Focus Here</p>
-                <div className="space-y-1.5">
-                  {(showAllWeakTopics ? weakTopics : weakTopics.slice(0, 3)).map((t: any) => (
-                    <div key={t.id} className="flex items-center justify-between bg-white/60 rounded-xl px-3 py-2">
-                      <span className="text-xs font-medium text-[#1A1A1A] truncate flex-1 mr-2">{t.title}</span>
-                      <span className={cn("text-xs font-bold shrink-0", masteryData[t.id]?.score >= 50 ? 'text-yellow-600' : 'text-red-600')}>
-                        {masteryData[t.id]?.score ?? 0}%
-                      </span>
-                    </div>
-                  ))}
-                  {weakTopics.length > 3 && (
-                    <button onClick={() => setShowAllWeakTopics(p => !p)} className="text-[10px] font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] flex items-center gap-1 mt-1">
-                      {showAllWeakTopics ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> {weakTopics.length - 3} more</>}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {allTopicsFlat.length === 0 && (
-              <p className="text-xs text-[#5A5A40]/60 italic">Upload a study plan to see topic-by-topic readiness.</p>
-            )}
-          </>
-        ) : (
-          !editingExam && (
-            <p className="text-sm text-[#5A5A40]/60 italic">Set your exam date to track readiness and see which topics need the most attention.</p>
-          )
+        {allTopicsFlat.length === 0 && exams.length > 0 && (
+          <p className="text-xs text-[#5A5A40]/60 italic mt-3">Upload a study plan to see topic-by-topic readiness.</p>
         )}
       </div>
 
