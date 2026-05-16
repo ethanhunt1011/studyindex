@@ -527,7 +527,7 @@ app.post("/api/study-notes", rateLimiter, async (req, res) => {
   const { topicTitle, context } = req.body;
   if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
 
-  const cacheKey = `notes:${topicTitle}`;
+  const cacheKey = `notes_v2:${topicTitle}`;
   if (chatCache.has(cacheKey)) return res.json(JSON.parse(chatCache.get(cacheKey)!));
 
   try {
@@ -536,16 +536,25 @@ app.post("/api/study-notes", rateLimiter, async (req, res) => {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Generate comprehensive, exam-ready study notes for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+      contents: `You are an excellent teacher — the kind students remember for life. Your job is to explain "${topicTitle}" to a student as if you're sitting across the table from them.${context ? ` Context from their study material: ${context}` : ''}
 
-Write like an expert tutor preparing a student for a high-stakes exam. Be thorough yet clear:
-- summary: 3-4 sentence overview explaining what this topic is, why it matters, and the core idea
-- keyConcepts: 5-8 essential terms with precise, exam-ready definitions (not generic — specific to this topic)
-- keyPoints: 6-10 bullet points covering all important facts, rules, properties, formulas, or processes a student MUST know
-- examples: 3-5 concrete worked examples, calculations, or real-world applications that illustrate the concept
-- commonMistakes: 3-5 frequent errors students make and how to avoid them
-- examTips: 3-4 specific strategies for answering exam questions on this topic
-- memoryTip: one vivid mnemonic, analogy, or mental model that makes the concept unforgettable`,
+Do NOT write like a textbook. Write like a person. Use "you" and "let's". Be warm, direct, and occasionally funny. Make the student feel like they're getting a private tutoring session, not reading an encyclopedia.
+
+Here's what each field should feel like:
+
+- summary: Open with something that makes the student actually care — a surprising fact, a real-world consequence, or a "here's why this matters" moment. Then explain the concept in plain English, like you're talking to a smart friend who's never studied this before. 3-4 sentences, conversational tone.
+
+- keyConcepts: For each key term, give a definition the way a teacher would explain it at the board — not a dictionary entry. Start with "This is basically..." or "Think of it as..." where helpful. Make the definition click, not just inform.
+
+- keyPoints: These are your core teaching moments. Each point should read like a sentence you'd say out loud in class — not a fragment. Share insights, not just facts. If there's a pattern, a trick, a reason WHY something works, say it here.
+
+- examples: Walk the student through each example like you're doing it together. Use phrases like "So here's what happens...", "Notice how...", "This is exactly why...". Make the student see the concept in action, not just read about it.
+
+- commonMistakes: Be the teacher who warns students before the exam. Use empathy — "A lot of students get confused here and that's totally understandable, because..." Then explain what goes wrong and how to avoid it.
+
+- examTips: Coach them like you've seen a thousand exam papers. "When you see this type of question, your first move should be..." Specific, tactical advice — not generic study tips.
+
+- memoryTip: Give them ONE unforgettable analogy, story, or mnemonic. Something so vivid they'll think of it in the exam room. The weirder and more specific, the better.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
