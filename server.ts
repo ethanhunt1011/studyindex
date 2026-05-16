@@ -4,6 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import path from "path";
 import { fileURLToPath } from "url";
 import { YoutubeTranscript } from "youtube-transcript";
+import multer from "multer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,8 +12,27 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-// 50 MB global limit — upload route sends base64-encoded files in JSON body
-app.use(express.json({ limit: '50mb' }));
+// JSON body limit — file uploads now go through multipart/form-data (multer), not JSON
+app.use(express.json({ limit: '10mb' }));
+
+// ─── Multer: multipart upload (up to 150 MB) ──────────────────────────────────
+const INLINE_THRESHOLD = 15 * 1024 * 1024; // files ≤ 15 MB → Gemini inlineData
+                                             // files  > 15 MB → Gemini File API
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 150 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'text/plain', 'text/markdown',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+    ];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
 
 // ─── Rate limiter ──────────────────────────────────────────────────────────────
 const rateLimit = new Map<string, { count: number; resetTime: number }>();
@@ -128,9 +148,19 @@ function retrieveRelevantChunks(
 
 // ─── File content helpers ──────────────────────────────────────────────────────
 
-/** Convert a stored base64 data-URI into Gemini content parts */
-function fileToContentParts(content: string, mimeType: string): any[] {
-  if (mimeType && (mimeType.startsWith('image/') || mimeType === 'application/pdf')) {
+interface StoredFile {
+  content?: string;   // base64 DataURI — set for inline (≤ 15 MB) files
+  fileUri?: string;   // Gemini File API URI — set for large (> 15 MB) files
+  mimeType: string;
+}
+
+/** Build Gemini content parts from a stored file record */
+function fileToContentParts(stored: StoredFile): any[] {
+  if (stored.fileUri) {
+    return [{ fileData: { fileUri: stored.fileUri, mimeType: stored.mimeType } }];
+  }
+  const { content = '', mimeType } = stored;
+  if (mimeType?.startsWith('image/') || mimeType === 'application/pdf') {
     const base64Data = content.includes(',') ? content.split(',')[1] : content;
     return [{ inlineData: { data: base64Data, mimeType } }];
   }
@@ -142,48 +172,82 @@ function fileToContentParts(content: string, mimeType: string): any[] {
   return [{ text: textContent }];
 }
 
-/** Decode a stored base64 data-URI to plain text (for RAG chunking) */
-function decodeToText(content: string): string {
+/** Decode an inline base64 data-URI to plain text (for RAG chunking) */
+function decodeToText(stored: StoredFile): string {
+  if (stored.fileUri) return ''; // large files handled natively by Gemini — no local RAG
+  const content = stored.content || '';
   if (!content.includes(',')) return content;
   try { return Buffer.from(content.split(',')[1], 'base64').toString('utf-8'); }
   catch { return content; }
 }
 
 // ─── /api/upload ──────────────────────────────────────────────────────────────
-app.post("/api/upload", (req, res) => {
-  const { content, mimeType } = req.body;
-  console.log('Upload received, mimeType:', mimeType, 'content length:', content?.length);
-  const fileId = Date.now().toString();
-  fileContents.set(fileId, JSON.stringify({ content, mimeType }));
-  res.json({ fileId });
+app.post("/api/upload", upload.single('file'), async (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No file received. Send a multipart/form-data request with field name "file".' });
 
-  // Non-blocking: chunk + embed text documents for RAG pipeline
-  if (!mimeType?.startsWith('image/') && mimeType !== 'application/pdf') {
-    setImmediate(async () => {
-      try {
-        const apiKey = getApiKey();
-        if (!apiKey) return;
-        const textContent = decodeToText(content);
-        const chunks = chunkText(textContent);
-        if (!chunks.length) return;
-        console.log(`RAG: embedding ${chunks.length} chunks for fileId ${fileId}`);
-        const ai = new GoogleGenAI({ apiKey });
-        const embeddings: number[][] = [];
-        for (const chunk of chunks) {
-          embeddings.push(await generateEmbedding(chunk, ai));
-          await new Promise(r => setTimeout(r, 80)); // gentle rate-limit
-        }
-        documentChunks.set(fileId, {
-          chunks,
-          embeddings,
-          embeddedAt: Date.now(),
-          model: 'text-embedding-004',
-        });
-        console.log(`RAG: ready — ${embeddings.filter(e => e.length).length}/${chunks.length} chunks embedded`);
-      } catch (err) {
-        console.error('RAG background embedding error:', err);
+  const mimeType = file.mimetype;
+  const fileId = Date.now().toString();
+  console.log(`Upload received: ${file.originalname} | ${mimeType} | ${(file.size / 1024 / 1024).toFixed(1)} MB`);
+
+  try {
+    if (file.size > INLINE_THRESHOLD) {
+      // ── Large file: upload to Gemini File API ──────────────────────────────
+      console.log(`Large file — uploading to Gemini File API...`);
+      const apiKey = getApiKey();
+      if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
+      const ai = new GoogleGenAI({ apiKey });
+
+      const blob = new Blob([file.buffer], { type: mimeType });
+      let geminiFile = await ai.files.upload({ file: blob, config: { mimeType, displayName: file.originalname || 'upload' } });
+
+      // Poll until Gemini finishes processing (usually seconds for PDFs)
+      const deadline = Date.now() + 120_000;
+      while (geminiFile.state === 'PROCESSING') {
+        if (Date.now() > deadline) return res.status(504).json({ error: 'Gemini file processing timed out. Try a smaller file.' });
+        await new Promise(r => setTimeout(r, 2000));
+        geminiFile = await ai.files.get({ name: geminiFile.name! });
       }
-    });
+      if (geminiFile.state === 'FAILED') return res.status(500).json({ error: 'Gemini could not process this file.' });
+
+      const stored: StoredFile = { fileUri: geminiFile.uri!, mimeType };
+      fileContents.set(fileId, JSON.stringify(stored));
+      console.log(`Gemini File API ready: ${geminiFile.uri}`);
+      return res.json({ fileId });
+    }
+
+    // ── Small file: store as base64 inline ────────────────────────────────────
+    const dataUri = `data:${mimeType};base64,${file.buffer.toString('base64')}`;
+    const stored: StoredFile = { content: dataUri, mimeType };
+    fileContents.set(fileId, JSON.stringify(stored));
+    res.json({ fileId });
+
+    // Non-blocking RAG pipeline for text documents
+    if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf') {
+      setImmediate(async () => {
+        try {
+          const apiKey = getApiKey();
+          if (!apiKey) return;
+          const textContent = decodeToText(stored);
+          const chunks = chunkText(textContent);
+          if (!chunks.length) return;
+          console.log(`RAG: embedding ${chunks.length} chunks for fileId ${fileId}`);
+          const ai = new GoogleGenAI({ apiKey });
+          const embeddings: number[][] = [];
+          for (const chunk of chunks) {
+            embeddings.push(await generateEmbedding(chunk, ai));
+            await new Promise(r => setTimeout(r, 80));
+          }
+          documentChunks.set(fileId, { chunks, embeddings, embeddedAt: Date.now(), model: 'text-embedding-004' });
+          console.log(`RAG: ready — ${embeddings.filter(e => e.length).length}/${chunks.length} chunks embedded`);
+        } catch (err) {
+          console.error('RAG background embedding error:', err);
+        }
+      });
+    }
+  } catch (err: any) {
+    console.error('Upload error:', err);
+    return res.status(500).json({ error: err?.message || 'Upload failed.' });
   }
 });
 
@@ -209,13 +273,13 @@ app.post("/api/summarize", rateLimiter, async (req, res) => {
   if (chatCache.has(cacheKey)) return res.json({ summary: chatCache.get(cacheKey) });
 
   try {
-    const { content, mimeType } = JSON.parse(fileData);
+    const stored: StoredFile = JSON.parse(fileData);
     const apiKey = getApiKey();
     if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
 
     const ai = new GoogleGenAI({ apiKey });
-    const fileParts = fileToContentParts(content, mimeType);
-    const instruction = mimeType?.startsWith('image/')
+    const fileParts = fileToContentParts(stored);
+    const instruction = stored.mimeType?.startsWith('image/')
       ? "Summarize this image. Use a neat, clean, point-based format with bullet points instead of paragraphs."
       : "Summarize the above content. Use a neat, clean, point-based format with bullet points instead of paragraphs.";
     const contents: any[] = [...fileParts, { text: instruction }];
@@ -276,11 +340,11 @@ app.post("/api/extract-plan", rateLimiter, async (req, res) => {
   if (!fileData) return res.status(404).json({ error: "File not found" });
 
   try {
-    const { content, mimeType } = JSON.parse(fileData);
+    const stored: StoredFile = JSON.parse(fileData);
     const apiKey = getApiKey();
     if (!apiKey) return res.status(500).json({ error: 'Server configuration error.' });
     const ai = new GoogleGenAI({ apiKey });
-    const fileParts = fileToContentParts(content, mimeType);
+    const fileParts = fileToContentParts(stored);
     const contents: any[] = [
       ...fileParts,
       { text: `Extract a complete study plan hierarchy: Units → Chapters → Topics.
@@ -414,10 +478,10 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
     let ragEnabled = false;
 
     if (fileData) {
-      const { content, mimeType } = JSON.parse(fileData);
+      const stored: StoredFile = JSON.parse(fileData);
       const ragData = fileId ? documentChunks.get(fileId) : null;
 
-      if (ragData && ragData.embeddings.some(e => e.length > 0)) {
+      if (!stored.fileUri && ragData && ragData.embeddings.some(e => e.length > 0)) {
         // ── RAG: embed query → cosine similarity → retrieve top-k chunks ──
         const queryEmbedding = await generateEmbedding(input, ai);
         const relevant = retrieveRelevantChunks(queryEmbedding, fileId!, 5);
@@ -429,12 +493,11 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
           ragEnabled = true;
           console.log(`RAG: retrieved ${relevant.length} chunks (top score: ${relevant[0]?.score.toFixed(3)})`);
         } else {
-          // Query embedding worked but nothing was relevant enough — use full doc
-          contents.push(...fileToContentParts(content, mimeType));
+          contents.push(...fileToContentParts(stored));
         }
       } else {
-        // No embeddings (image/PDF or still computing) — full-doc fallback
-        contents.push(...fileToContentParts(content, mimeType));
+        // Large file (File API) or no embeddings yet — pass file directly to Gemini
+        contents.push(...fileToContentParts(stored));
       }
     }
 

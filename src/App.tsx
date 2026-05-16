@@ -347,80 +347,72 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    console.log('File selected:', file.name, file.type);
+    console.log('File selected:', file.name, file.type, `${(file.size / 1024 / 1024).toFixed(1)} MB`);
     setProcessing(true);
     setError(null);
-    
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        const base64Content = reader.result as string;
-        console.log('File read, sending to /api/upload');
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: base64Content, mimeType: file.type }),
-        });
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Upload failed (${response.status})`);
-        }
+    try {
+      // Send as multipart/form-data — no base64 inflation, supports large files
+      const formData = new FormData();
+      formData.append('file', file);
 
-        const data = await response.json();
-        console.log('File uploaded, fileId:', data.fileId);
-        setFileId(data.fileId);
+      const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Upload failed (${response.status})`);
+      }
 
-        // Extract study plan
-        console.log('Extracting study plan...');
-        const planResponse = await fetch('/api/extract-plan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileId: data.fileId }),
-        });
+      const data = await response.json();
+      console.log('File uploaded, fileId:', data.fileId);
+      setFileId(data.fileId);
 
-        if (!planResponse.ok) {
-          const errData = await planResponse.json().catch(() => ({}));
-          throw new Error(errData.error || `Plan extraction failed (${planResponse.status})`);
-        }
+      // Extract study plan
+      const planResponse = await fetch('/api/extract-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: data.fileId }),
+      });
 
-        const planData = await planResponse.json();
-        const newPlan: StudyPlan = {
-          id: data.fileId,
-          bookTitle: planData.bookTitle || file.name,
-          units: (planData.units || []).map((u: any, uIdx: number) => ({
-            ...u,
-            id: u.id || crypto.randomUUID(),
-            order: u.order ?? uIdx,
-            chapters: (u.chapters || []).map((c: any, cIdx: number) => ({
-              ...c,
-              id: c.id || crypto.randomUUID(),
-              order: c.order ?? cIdx,
-              topics: (c.topics || []).map((t: any, tIdx: number) => ({
-                ...t,
-                id: t.id || crypto.randomUUID(),
-                order: t.order ?? tIdx,
-              })),
+      if (!planResponse.ok) {
+        const errData = await planResponse.json().catch(() => ({}));
+        throw new Error(errData.error || `Plan extraction failed (${planResponse.status})`);
+      }
+
+      const planData = await planResponse.json();
+      const newPlan: StudyPlan = {
+        id: data.fileId,
+        bookTitle: planData.bookTitle || file.name,
+        units: (planData.units || []).map((u: any, uIdx: number) => ({
+          ...u,
+          id: u.id || crypto.randomUUID(),
+          order: u.order ?? uIdx,
+          chapters: (u.chapters || []).map((c: any, cIdx: number) => ({
+            ...c,
+            id: c.id || crypto.randomUUID(),
+            order: c.order ?? cIdx,
+            topics: (c.topics || []).map((t: any, tIdx: number) => ({
+              ...t,
+              id: t.id || crypto.randomUUID(),
+              order: t.order ?? tIdx,
             })),
           })),
-          createdAt: new Date().toISOString()
-        };
+        })),
+        createdAt: new Date().toISOString()
+      };
 
-        setPlans(prev => [newPlan, ...prev]);
-        setProgress(prev => ({
-          ...prev,
-          [newPlan.id]: { planId: newPlan.id, completedTopicIds: [], lastStudiedAt: new Date().toISOString() }
-        }));
+      setPlans(prev => [newPlan, ...prev]);
+      setProgress(prev => ({
+        ...prev,
+        [newPlan.id]: { planId: newPlan.id, completedTopicIds: [], lastStudiedAt: new Date().toISOString() }
+      }));
 
-        handleDocumentUploaded();
-        setProcessing(false);
-      } catch (err: any) {
-        console.error('Upload error:', err);
-        setError(err?.message || 'Failed to upload file and extract plan.');
-        setProcessing(false);
-      }
-    };
-    reader.readAsDataURL(file);
+      handleDocumentUploaded();
+      setProcessing(false);
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      setError(err?.message || 'Failed to upload file and extract plan.');
+      setProcessing(false);
+    }
   };
   const toggleTopic = (planId: string, topicId: string) => {
     setProgress(prev => {
