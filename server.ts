@@ -524,11 +524,34 @@ app.post("/api/chat", rateLimiter, async (req, res) => {
 
 // ─── /api/study-notes ────────────────────────────────────────────────────────
 app.post("/api/study-notes", rateLimiter, async (req, res) => {
-  const { topicTitle, context } = req.body;
+  const { topicTitle, context, style = 'teacher' } = req.body;
   if (!topicTitle) return res.status(400).json({ error: "topicTitle is required" });
 
-  const cacheKey = `notes_v2:${topicTitle}`;
+  const cacheKey = `notes_${style}:${topicTitle}`;
   if (chatCache.has(cacheKey)) return res.json(JSON.parse(chatCache.get(cacheKey)!));
+
+  const classicPrompt = `Generate comprehensive, exam-ready study notes for: "${topicTitle}".${context ? ` Context: ${context}` : ''}
+
+Write like an expert academic preparing precise, structured notes:
+- summary: 3-4 sentence overview — what this topic is, why it matters, and the core idea. Formal and precise.
+- keyConcepts: 5-8 essential terms with rigorous, exam-ready definitions specific to this topic.
+- keyPoints: 6-10 bullet points covering all important facts, rules, properties, formulas, or processes a student MUST know. Be thorough.
+- examples: 3-5 concrete worked examples, calculations, or real-world applications. State them clearly and concisely.
+- commonMistakes: 3-5 frequent errors students make and the precise reason each is wrong.
+- examTips: 3-4 specific strategies for answering exam questions on this topic.
+- memoryTip: one clear mnemonic or structured recall method.`;
+
+  const teacherPrompt = `You are an excellent teacher — the kind students remember for life. Explain "${topicTitle}" to a student as if you're sitting across the table from them.${context ? ` Context from their study material: ${context}` : ''}
+
+Do NOT write like a textbook. Write like a person. Use "you" and "let's". Be warm, direct, and occasionally funny.
+
+- summary: Open with something that makes the student actually care — a surprising fact, a real-world consequence, or a "here's why this matters" moment. Then explain in plain English like you're talking to a smart friend. Conversational, 3-4 sentences.
+- keyConcepts: Define each term the way a teacher explains at the board — not a dictionary entry. Use "Think of it as..." or "This is basically..." where it helps. Make it click.
+- keyPoints: Your core teaching moments. Each point reads like something you'd say out loud in class. Share insights and the reason WHY, not just facts.
+- examples: Walk through each example together. "So here's what happens...", "Notice how...", "This is exactly why...". Make the student see it in action.
+- commonMistakes: Warn them with empathy — "A lot of students get confused here, and honestly that's because..." Then explain what goes wrong and how to avoid it.
+- examTips: Coach them like you've marked a thousand papers. "When you see this type of question, your first move should be..." Specific and tactical.
+- memoryTip: One unforgettable analogy, story, or mnemonic. Something so vivid they'll recall it in the exam room. The weirder and more specific, the better.`;
 
   try {
     const apiKey = getApiKey();
@@ -536,25 +559,7 @@ app.post("/api/study-notes", rateLimiter, async (req, res) => {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `You are an excellent teacher — the kind students remember for life. Your job is to explain "${topicTitle}" to a student as if you're sitting across the table from them.${context ? ` Context from their study material: ${context}` : ''}
-
-Do NOT write like a textbook. Write like a person. Use "you" and "let's". Be warm, direct, and occasionally funny. Make the student feel like they're getting a private tutoring session, not reading an encyclopedia.
-
-Here's what each field should feel like:
-
-- summary: Open with something that makes the student actually care — a surprising fact, a real-world consequence, or a "here's why this matters" moment. Then explain the concept in plain English, like you're talking to a smart friend who's never studied this before. 3-4 sentences, conversational tone.
-
-- keyConcepts: For each key term, give a definition the way a teacher would explain it at the board — not a dictionary entry. Start with "This is basically..." or "Think of it as..." where helpful. Make the definition click, not just inform.
-
-- keyPoints: These are your core teaching moments. Each point should read like a sentence you'd say out loud in class — not a fragment. Share insights, not just facts. If there's a pattern, a trick, a reason WHY something works, say it here.
-
-- examples: Walk the student through each example like you're doing it together. Use phrases like "So here's what happens...", "Notice how...", "This is exactly why...". Make the student see the concept in action, not just read about it.
-
-- commonMistakes: Be the teacher who warns students before the exam. Use empathy — "A lot of students get confused here and that's totally understandable, because..." Then explain what goes wrong and how to avoid it.
-
-- examTips: Coach them like you've seen a thousand exam papers. "When you see this type of question, your first move should be..." Specific, tactical advice — not generic study tips.
-
-- memoryTip: Give them ONE unforgettable analogy, story, or mnemonic. Something so vivid they'll think of it in the exam room. The weirder and more specific, the better.`,
+      contents: style === 'classic' ? classicPrompt : teacherPrompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {

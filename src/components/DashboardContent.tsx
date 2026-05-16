@@ -78,16 +78,23 @@ const ProgressRing = ({
 };
 
 // ─── Study Notes Modal ───────────────────────────────────────────────────────
+type NoteStyle = 'teacher' | 'classic';
+
 const StudyNotesModal = ({ topic, onClose }: { topic: any; onClose: () => void }) => {
+  const [style, setStyle] = React.useState<NoteStyle | null>(null);
   const [notes, setNotes] = React.useState<any>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
+  const fetchNotes = (s: NoteStyle) => {
+    setStyle(s);
+    setNotes(null);
+    setError(null);
+    setLoading(true);
     fetch('/api/study-notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topicTitle: topic.title, context: topic.dailyExercise || '' }),
+      body: JSON.stringify({ topicTitle: topic.title, context: topic.dailyExercise || '', style: s }),
     })
       .then(r => r.json())
       .then(data => {
@@ -96,7 +103,7 @@ const StudyNotesModal = ({ topic, onClose }: { topic: any; onClose: () => void }
         setLoading(false);
       })
       .catch((err: any) => { setError(err.message || 'Failed to load notes'); setLoading(false); });
-  }, []);
+  };
 
   return (
     <AnimatePresence>
@@ -125,10 +132,37 @@ const StudyNotesModal = ({ topic, onClose }: { topic: any; onClose: () => void }
             </div>
           </div>
 
+          {/* ── Style picker (shown before first load) ── */}
+          {!style && !loading && (
+            <div className="py-2">
+              <p className="text-sm font-semibold text-[#1A1A1A] mb-1">How would you like your notes?</p>
+              <p className="text-xs text-[#5A5A40]/60 mb-5">You can switch styles anytime after loading.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => fetchNotes('classic')}
+                  className="flex flex-col items-start gap-2 p-4 rounded-2xl border-2 border-[#1A1A1A]/8 hover:border-[#5A5A40]/40 hover:bg-[#F5F5F0] transition-all text-left group"
+                >
+                  <span className="text-2xl">📚</span>
+                  <span className="font-bold text-sm text-[#1A1A1A]">Classic</span>
+                  <span className="text-[11px] text-[#5A5A40]/60 leading-relaxed">Structured, precise, textbook-style. Great for definitions and formulas.</span>
+                </button>
+                <button
+                  onClick={() => fetchNotes('teacher')}
+                  className="flex flex-col items-start gap-2 p-4 rounded-2xl border-2 border-[#5A5A40]/30 bg-[#5A5A40]/5 hover:border-[#5A5A40]/60 hover:bg-[#5A5A40]/10 transition-all text-left group"
+                >
+                  <span className="text-2xl">👨‍🏫</span>
+                  <span className="font-bold text-sm text-[#1A1A1A]">Teacher Mode</span>
+                  <span className="text-[11px] text-[#5A5A40]/60 leading-relaxed">Conversational and engaging, like a private tutoring session.</span>
+                  <span className="text-[10px] font-bold text-[#5A5A40] bg-[#5A5A40]/10 px-2 py-0.5 rounded-full">Recommended</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {loading && (
             <div className="py-12 flex flex-col items-center gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-[#5A5A40]" />
-              <p className="text-sm text-[#5A5A40]/60">Generating notes…</p>
+              <p className="text-sm text-[#5A5A40]/60">Generating {style === 'teacher' ? 'teacher-style' : 'classic'} notes…</p>
             </div>
           )}
 
@@ -136,6 +170,18 @@ const StudyNotesModal = ({ topic, onClose }: { topic: any; onClose: () => void }
 
           {notes && !loading && (
             <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+              {/* Style indicator + switch button */}
+              <div className="flex items-center justify-between pb-1 border-b border-[#1A1A1A]/5">
+                <span className="text-[11px] font-semibold text-[#5A5A40]/60">
+                  {style === 'teacher' ? '👨‍🏫 Teacher Mode' : '📚 Classic'}
+                </span>
+                <button
+                  onClick={() => fetchNotes(style === 'teacher' ? 'classic' : 'teacher')}
+                  className="text-[11px] font-bold text-[#5A5A40] hover:underline"
+                >
+                  Switch to {style === 'teacher' ? 'Classic' : 'Teacher Mode'}
+                </button>
+              </div>
               {/* Summary */}
               <div className="p-4 bg-[#5A5A40] rounded-2xl">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-white/50 mb-1.5">Summary</p>
