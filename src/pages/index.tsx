@@ -27,7 +27,8 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
   const [editingId, setEditingId] = useState<string | null>(null);
   const [examNameInput, setExamNameInput] = useState('');
   const [examDateInput, setExamDateInput] = useState('');
-  const [showAllWeakTopics, setShowAllWeakTopics] = useState(false);
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [showAllWeakTopics, setShowAllWeakTopics] = useState<Record<string, boolean>>({});
   const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({});
   // ── Compute stats ────────────────────────────────────────────────────────
   const totalMinutes = studySessions.reduce((s: number, x: any) => s + (x.durationMinutes || 0), 0);
@@ -73,33 +74,45 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
 
   const hasData = studySessions.length > 0 || plans.length > 0;
 
-  // ── Exam Readiness computation ───────────────────────────────────────────
+  // ── Per-plan topic map ───────────────────────────────────────────────────
   const allTopicsFlat = (plans || []).flatMap((p: any) =>
     (p.units || []).flatMap((u: any) =>
       (u.chapters || []).flatMap((c: any) => c.topics || [])
     )
   );
+  const planTopicsMap: Record<string, any[]> = {};
+  for (const plan of plans || []) {
+    planTopicsMap[plan.id] = (plan.units || []).flatMap((u: any) =>
+      (u.chapters || []).flatMap((c: any) => c.topics || [])
+    );
+  }
   const completedIds = Object.values(progress).flatMap((p: any) => p.completedTopicIds || []);
-  const completionPct = allTopicsFlat.length > 0 ? (completedIds.length / allTopicsFlat.length) * 100 : 0;
-  const avgMastery = allTopicsFlat.length > 0
-    ? allTopicsFlat.reduce((sum: number, t: any) => sum + (masteryData[t.id]?.score || 0), 0) / allTopicsFlat.length
-    : 0;
-  const readinessPct = Math.round(completionPct * 0.6 + avgMastery * 0.4);
 
-  const weakTopics = [...allTopicsFlat]
-    .filter((t: any) => masteryData[t.id])
-    .sort((a: any, b: any) => (masteryData[a.id]?.score ?? 100) - (masteryData[b.id]?.score ?? 100));
+  // Compute readiness for any set of topics — used per-exam with its linked plans
+  const computeReadiness = (topics: any[]) => {
+    if (!topics.length) return { completionPct: 0, avgMastery: 0, readinessPct: 0, weakTopics: [] as any[] };
+    const done = completedIds.filter(id => topics.some((t: any) => t.id === id)).length;
+    const completionPct = (done / topics.length) * 100;
+    const avgMastery = topics.reduce((s: number, t: any) => s + (masteryData[t.id]?.score || 0), 0) / topics.length;
+    const readinessPct = Math.round(completionPct * 0.6 + avgMastery * 0.4);
+    const weakTopics = [...topics]
+      .filter((t: any) => masteryData[t.id])
+      .sort((a: any, b: any) => (masteryData[a.id]?.score ?? 100) - (masteryData[b.id]?.score ?? 100))
+      .slice(0, 5);
+    return { completionPct, avgMastery, readinessPct, weakTopics };
+  };
 
   const saveExam = (id: string | null) => {
     if (!examDateInput) return;
     const updated = id
-      ? exams.map(e => e.id === id ? { ...e, examName: examNameInput || 'Exam', examDate: examDateInput } : e)
-      : [...exams, { id: Date.now().toString(), examName: examNameInput || 'Exam', examDate: examDateInput }];
+      ? exams.map(e => e.id === id ? { ...e, examName: examNameInput || 'Exam', examDate: examDateInput, planIds: selectedPlanIds } : e)
+      : [...exams, { id: Date.now().toString(), examName: examNameInput || 'Exam', examDate: examDateInput, planIds: selectedPlanIds }];
     handleSaveExamSettings?.(updated);
     setShowAddExam(false);
     setEditingId(null);
     setExamNameInput('');
     setExamDateInput('');
+    setSelectedPlanIds([]);
   };
 
   const deleteExam = (id: string) => {
@@ -110,8 +123,35 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
     setEditingId(exam.id);
     setExamNameInput(exam.examName);
     setExamDateInput(exam.examDate);
+    setSelectedPlanIds(exam.planIds || []);
     setShowAddExam(false);
   };
+
+  // Plan selector shared between add and edit forms
+  const PlanSelector = () => (
+    plans.length > 0 ? (
+      <div>
+        <p className="text-[10px] font-bold text-[#5A5A40]/60 uppercase tracking-widest mb-2 flex items-center gap-1">
+          <BookOpen className="w-3 h-3" /> Link to study plan(s)
+        </p>
+        <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+          {(plans as any[]).map((plan: any) => (
+            <label key={plan.id} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/70 cursor-pointer transition-colors">
+              <input
+                type="checkbox"
+                checked={selectedPlanIds.includes(plan.id)}
+                onChange={() => setSelectedPlanIds(prev =>
+                  prev.includes(plan.id) ? prev.filter(id => id !== plan.id) : [...prev, plan.id]
+                )}
+                className="w-4 h-4 rounded accent-[#5A5A40] shrink-0"
+              />
+              <span className="text-xs font-medium text-[#1A1A1A] truncate">{plan.bookTitle || 'Untitled Plan'}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    ) : null
+  );
 
   // ── Forgetting Curve (Ebbinghaus) — R = e^(-t / S) ──────────────────────
   // S = SM-2 interval (stability), t = days since last review
@@ -156,7 +196,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
             )}
           </div>
           <button
-            onClick={() => { setShowAddExam(p => !p); setEditingId(null); setExamNameInput(''); setExamDateInput(''); }}
+            onClick={() => { setShowAddExam(p => !p); setEditingId(null); setExamNameInput(''); setExamDateInput(''); setSelectedPlanIds([]); }}
             className="flex items-center gap-1 text-xs font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> Add Exam
@@ -169,6 +209,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
             <p className="text-xs font-bold text-[#5A5A40]/60 uppercase tracking-widest">New Exam</p>
             <input type="text" value={examNameInput} onChange={e => setExamNameInput(e.target.value)} placeholder="Exam name (e.g. IELTS, Finals...)" className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
             <input type="date" value={examDateInput} min={new Date().toISOString().split('T')[0]} onChange={e => setExamDateInput(e.target.value)} className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
+            <PlanSelector />
             <div className="flex gap-2">
               <button onClick={() => saveExam(null)} disabled={!examDateInput} className="flex-1 py-2 rounded-xl bg-[#5A5A40] text-white text-sm font-bold disabled:opacity-50 hover:bg-[#4A4A30] transition-colors">Add</button>
               <button onClick={() => setShowAddExam(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
@@ -183,10 +224,19 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
         <div className="space-y-4">
           {exams.map((exam: any) => {
             const daysLeft = Math.ceil((new Date(exam.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-            const rColor = readinessPct >= 70 ? 'text-green-700' : readinessPct >= 40 ? 'text-yellow-700' : 'text-red-700';
-            const rBg = readinessPct >= 70 ? 'bg-green-50 border-green-100' : readinessPct >= 40 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100';
-            const rFill = readinessPct >= 70 ? 'bg-green-500' : readinessPct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
             const isPast = daysLeft < 0;
+
+            // ── Per-exam readiness: use only linked plans' topics ──────────────
+            const linkedIds: string[] = exam.planIds || [];
+            const isLinked = linkedIds.length > 0;
+            const examTopics = isLinked
+              ? linkedIds.flatMap(pid => planTopicsMap[pid] || [])
+              : allTopicsFlat; // fallback — no plan linked yet
+            const { completionPct, avgMastery, readinessPct: rPct, weakTopics: examWeak } = computeReadiness(examTopics);
+
+            const rColor = rPct >= 70 ? 'text-green-700' : rPct >= 40 ? 'text-yellow-700' : 'text-red-700';
+            const rBg   = rPct >= 70 ? 'bg-green-50 border-green-100' : rPct >= 40 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100';
+            const rFill = rPct >= 70 ? 'bg-green-500' : rPct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
 
             return (
               <div key={exam.id} className={cn("rounded-2xl border p-4", isPast ? 'bg-gray-50 border-gray-200 opacity-60' : rBg)}>
@@ -194,6 +244,7 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
                   <div className="space-y-3">
                     <input type="text" value={examNameInput} onChange={e => setExamNameInput(e.target.value)} className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
                     <input type="date" value={examDateInput} onChange={e => setExamDateInput(e.target.value)} className="w-full bg-white border border-[#1A1A1A]/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20" />
+                    <PlanSelector />
                     <div className="flex gap-2">
                       <button onClick={() => saveExam(exam.id)} disabled={!examDateInput} className="flex-1 py-1.5 rounded-xl bg-[#5A5A40] text-white text-sm font-bold disabled:opacity-50">Save</button>
                       <button onClick={() => setEditingId(null)} className="px-4 py-1.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-500">Cancel</button>
@@ -201,10 +252,23 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0 mr-3">
                         <p className="font-bold text-sm text-[#1A1A1A] truncate">{exam.examName || 'Exam'}</p>
                         <p className="text-xs text-[#5A5A40]/60 mt-0.5">{new Date(exam.examDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                        {/* Linked plan chips */}
+                        {isLinked && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {linkedIds.map(pid => {
+                              const plan = (plans as any[]).find(p => p.id === pid);
+                              return plan ? (
+                                <span key={pid} className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 bg-white/70 border border-white/60 rounded-full text-[#5A5A40]/80 max-w-[140px] truncate">
+                                  <BookOpen className="w-2.5 h-2.5 shrink-0" />{plan.bookTitle || 'Plan'}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="text-center">
@@ -224,19 +288,53 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
                       </div>
                     </div>
 
+                    {/* Unlinked warning */}
+                    {!isPast && !isLinked && (plans as any[]).length > 0 && (
+                      <p className="text-[10px] text-amber-600 flex items-center gap-1 mb-2 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        No study plan linked — edit to connect a book so readiness is accurate
+                      </p>
+                    )}
+
                     {!isPast && (
                       <>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-[#5A5A40]/60">Readiness</span>
-                          <span className={cn("text-xs font-bold", rColor)}>{readinessPct}%</span>
+                          <span className="text-xs text-[#5A5A40]/60">Readiness {!isLinked && allTopicsFlat.length > 0 ? '(all plans)' : ''}</span>
+                          <span className={cn("text-xs font-bold", rColor)}>{rPct}%</span>
                         </div>
                         <div className="h-2 bg-white/60 rounded-full overflow-hidden border border-white/40 mb-2">
-                          <motion.div initial={{ width: 0 }} animate={{ width: `${readinessPct}%` }} transition={{ duration: 1, ease: 'easeOut' }} className={cn("h-full rounded-full", rFill)} />
+                          <motion.div initial={{ width: 0 }} animate={{ width: `${rPct}%` }} transition={{ duration: 1, ease: 'easeOut' }} className={cn("h-full rounded-full", rFill)} />
                         </div>
-                        <div className="flex justify-between text-[10px] text-[#5A5A40]/60">
+                        <div className="flex justify-between text-[10px] text-[#5A5A40]/60 mb-3">
                           <span>Completion: {Math.round(completionPct)}%</span>
                           <span>Avg Mastery: {Math.round(avgMastery)}%</span>
                         </div>
+
+                        {/* Per-exam weak topics */}
+                        {examWeak.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-1.5">Weakest Areas — Focus Here</p>
+                            <div className="space-y-1">
+                              {(showAllWeakTopics[exam.id] ? examWeak : examWeak.slice(0, 3)).map((t: any) => (
+                                <div key={t.id} className="flex items-center justify-between bg-white/60 rounded-xl px-3 py-1.5">
+                                  <span className="text-xs font-medium text-[#1A1A1A] truncate flex-1 mr-2">{t.title}</span>
+                                  <span className={cn("text-xs font-bold shrink-0", masteryData[t.id]?.score >= 50 ? 'text-yellow-600' : 'text-red-600')}>
+                                    {masteryData[t.id]?.score ?? 0}%
+                                  </span>
+                                </div>
+                              ))}
+                              {examWeak.length > 3 && (
+                                <button onClick={() => setShowAllWeakTopics(p => ({ ...p, [exam.id]: !p[exam.id] }))} className="text-[10px] font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] flex items-center gap-1 mt-0.5">
+                                  {showAllWeakTopics[exam.id] ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> {examWeak.length - 3} more</>}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {isLinked && examTopics.length === 0 && (
+                          <p className="text-[10px] text-[#5A5A40]/50 italic">Upload topics to the linked plan to see readiness.</p>
+                        )}
                       </>
                     )}
                   </>
@@ -245,27 +343,6 @@ export const Analytics = ({ studySessions = [], plans = [], progress = {}, profi
             );
           })}
         </div>
-
-        {weakTopics.length > 0 && exams.some((e: any) => Math.ceil((new Date(e.examDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) >= 0) && (
-          <div className="mt-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/50 mb-2">Weakest Areas — Focus Here</p>
-            <div className="space-y-1.5">
-              {(showAllWeakTopics ? weakTopics : weakTopics.slice(0, 3)).map((t: any) => (
-                <div key={t.id} className="flex items-center justify-between bg-[#F5F5F0] rounded-xl px-3 py-2">
-                  <span className="text-xs font-medium text-[#1A1A1A] truncate flex-1 mr-2">{t.title}</span>
-                  <span className={cn("text-xs font-bold shrink-0", masteryData[t.id]?.score >= 50 ? 'text-yellow-600' : 'text-red-600')}>
-                    {masteryData[t.id]?.score ?? 0}%
-                  </span>
-                </div>
-              ))}
-              {weakTopics.length > 3 && (
-                <button onClick={() => setShowAllWeakTopics(p => !p)} className="text-[10px] font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] flex items-center gap-1 mt-1">
-                  {showAllWeakTopics ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> {weakTopics.length - 3} more</>}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {allTopicsFlat.length === 0 && exams.length > 0 && (
           <p className="text-xs text-[#5A5A40]/60 italic mt-3">Upload a study plan to see topic-by-topic readiness.</p>

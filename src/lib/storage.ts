@@ -251,6 +251,7 @@ export interface ExamSettings {
   id: string;
   examDate: string; // 'YYYY-MM-DD'
   examName: string;
+  planIds?: string[]; // linked study plan IDs
 }
 
 export const saveExamSettings = async (exams: ExamSettings[]) => {
